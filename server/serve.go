@@ -6,11 +6,12 @@ import (
 	rand "math/rand"
 	"net"
 	"time"
+	//"sync/atomic"
 
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"github.com/nyu-distributed-systems-fa18/starter-code-lab2/pb"
+	"github.com/nyu-distributed-systems-fa18/lab-2-raft-ywng/pb"
 )
 
 // Messages that can be passed from the Raft RPC server to the main loop for AppendEntries
@@ -137,20 +138,41 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	// Create a timer and start running it
 	timer := time.NewTimer(randomDuration(r))
 
+
+
+
+	//vote count
+	//var isLeader bool = false
+	var votesGranted int = 0
+	var quorumSize int = len(peerClients)/2 + 1
+
+	var currentTerm int64 = 0
+	var votedFor string
+	var lastVoteTerm int64 = 0
+	var lastTerm, lastIndex int64 = 0, 0
+
+
 	// Run forever handling inputs from various channels
 	for {
 		select {
 		case <-timer.C:
 			// The timer went off.
-			log.Printf("Timeout")
+			log.Printf("Timeout, becomes a candiate requesting vote...")
+			votesGranted = 1 //vote for itself
+			currentTerm++
+			lastVoteTerm = currentTerm
+			votedFor = id
 			for p, c := range peerClients {
 				// Send in parallel so we don't wait for each client.
 				go func(c pb.RaftClient, p string) {
-					ret, err := c.RequestVote(context.Background(), &pb.RequestVoteArgs{Term: 1, CandidateID: id})
+					ret, err := c.RequestVote(context.Background(), 
+								&pb.RequestVoteArgs{Term: currentTerm, CandidateID: id, LastLogIndex: lastIndex, LastLogTerm: lastTerm})
 					voteResponseChan <- VoteResponse{ret: ret, err: err, peer: p}
 				}(c, p)
 			}
 			// This will also take care of any pesky timeouts that happened while processing the operation.
+			// this also means within timeout period without receiving majority votes, split votes etc... 
+			// it will trigger the election process again
 			restartTimer(timer, r)
 		case op := <-s.C:
 			// We received an operation from a client
@@ -165,21 +187,81 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			ae.response <- pb.AppendEntriesRet{Term: 1, Success: true}
 			// This will also take care of any pesky timeouts that happened while processing the operation.
 			restartTimer(timer, r)
-		case vr := <-raft.VoteChan:
+		case vreq := <-raft.VoteChan:
 			// We received a RequestVote RPC from a raft peer
 			// TODO: Fix this.
-			log.Printf("Received vote request from %v", vr.arg.CandidateID)
-			vr.response <- pb.RequestVoteRet{Term: 1, VoteGranted: false}
-		case vr := <-voteResponseChan:
+			log.Printf("Received vote request from %v", vreq.arg.CandidateID)
+			resp := pb.RequestVoteRet{
+						Term: currentTerm, 
+						VoteGranted: false,
+					}
+
+			if vreq.arg.Term < currentTerm {
+				log.Printf("Rejecting vote request from %v since current term is greater than request vote term (%d, %d)", 
+					vreq.arg.CandidateID, currentTerm, vreq.arg.Term)
+			} else if vreq.arg.Term > currentTerm {
+				resp.Term = vreq.arg.Term
+				resp.VoteGranted = true
+				//isLeader = false
+				//if is leader, step down
+				currentTerm = vreq.arg.Term
+				lastVoteTerm = vreq.arg.Term
+				votedFor = vreq.arg.CandidateID
+			} else if lastVoteTerm == vreq.arg.Term && votedFor != "" {
+				if votedFor == vreq.arg.CandidateID {
+					log.Printf("Duplicated vote request from %v", vreq.arg.CandidateID)
+					resp.VoteGranted = true
+				}
+			} else {
+				if lastTerm > vreq.arg.LastLogTerm {
+					log.Printf("Rejecting vote request from %v since our last term is greater (%d, %d)", 
+						vreq.arg.CandidateID, lastTerm, vreq.arg.LastLogTerm)
+				} else if lastTerm == vreq.arg.LastLogTerm  && lastIndex > vreq.arg.LastLogIndex {
+					log.Printf("Rejecting vote request from %v since our last index is greater (%d, %d)", 
+						vreq.arg.CandidateID, lastIndex, vreq.arg.LastLogIndex)
+				} else {
+					resp.VoteGranted = true
+					lastVoteTerm = vreq.arg.Term
+					votedFor = vreq.arg.CandidateID
+				}
+			}
+
+			vreq.response <- resp
+			restartTimer(timer, r)
+
+		case vres := <-voteResponseChan:
 			// We received a response to a previou vote request.
 			// TODO: Fix this
-			if vr.err != nil {
+
+			// If this peer is elected as leader, should stop the timer?
+			// When the leader crash-> restart / revert back to follower, need to restartTimer immediately.
+			if vres.err != nil {
 				// Do not do Fatalf here since the peer might be gone but we should survive.
-				log.Printf("Error calling RPC %v", vr.err)
+				log.Printf("Error calling RPC %v", vres.err)
 			} else {
-				log.Printf("Got response to vote request from %v", vr.peer)
-				log.Printf("Peers %s granted %v term %v", vr.peer, vr.ret.VoteGranted, vr.ret.Term)
+				log.Printf("Got response to vote request from %v", vres.peer)
+				log.Printf("Peers %s granted %v term %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
+
+				//check if the term is greater than candidate's term
+				if vres.ret.Term > currentTerm {
+					log.Printf("Newer term discovered, fallback to follower state.")
+					//fallback to follower
+					votesGranted = 0
+					currentTerm = vres.ret.Term
+					//isLeader = false
+				} else {
+					if vres.ret.VoteGranted {
+						votesGranted++;
+					}
+
+					if votesGranted >= quorumSize {
+						log.Printf("Won election. Granted votes: %d", votesGranted)
+						timer.Stop()
+						//isLeader = true
+					}
+				}
 			}
+
 		case ar := <-appendResponseChan:
 			// We received a response to a previous AppendEntries RPC call
 			log.Printf("Got append entries response from %v", ar.peer)

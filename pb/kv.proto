@@ -100,7 +100,7 @@ message RequestVoteArgs {
     int64 term = 1;
     string candidateID = 2;
     int64 lastLogIndex = 3;
-    int64 lasLogTerm = 4;
+    int64 lastLogTerm = 4;
 }
 
 // Output from RequestVote
