@@ -107,6 +107,7 @@ message RequestVoteArgs {
 message RequestVoteRet {
     int64 term = 1;
     bool voteGranted = 2;
+    string candidateID = 3;
 }
 
 // Raft service
