@@ -1,31 +1,17 @@
 package main
 
-import "sync"
 import (
 	"fmt"
 	"log"
 	rand "math/rand"
 	"net"
+	"sync"
 	"time"
 
-	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/nyu-distributed-systems-fa18/lab-2-raft-ywng/pb"
 )
-
-const (
-	follower  = 1
-	candidate = 2
-	leader    = 3
-	quit      = 4
-)
-
-type logEntry struct {
-	Term    int64
-	Index   int64
-	Command *pb.Command
-}
 
 type voteInfo struct {
 	mu         sync.Mutex
@@ -33,155 +19,34 @@ type voteInfo struct {
 	voteCount  int64
 }
 
-// Struct off of which we shall hang the Raft service
-type Raft struct {
-	AppendChan chan AppendEntriesInput
-	VoteChan   chan VoteInput
-
-	mu sync.Mutex //lock to protect shared access to this peer's state
-	//persister 	*Persister
-
-	state int64
-	quorumSize int64
-
-	//persistent states
-	currentTerm int64
-	votedFor string
-	lastVoteTerm int64
-	log []logEntry
-
-	//volatile states
-	commitIndex int64
-	lastApplied int64
-
-	//volatile states on leader
-	nextIndex map[string] int64
-	matchIndex map[string] int64
-
-	// Snapshot
-	lastIncludedLogEntry logEntry
-
-	killServer chan int64
-}
-
-func (r *Raft) getLastLogIndex() int64 {
-	return r.log[len(r.log)-1].Index
-}
-
-func (r *Raft) getLastLogTerm() int64 {
-	return r.log[len(r.log)-1].Term
-}
-
-func (r *Raft) getLogLen() int64 {
-	return int64(len(r.log))
-}
-
-func (r *Raft) addLogEntry(entry logEntry) {
-	r.log = append(r.log, entry)
-}
-
-func (r *Raft) getLogEntry(index int64) (logEntry, bool) {
-	var le logEntry
-	if r.getLogLen() == 0 {
-		return le, false
+func min(x, y int64) int64 {
+	if x < y {
+		return x
 	}
-	firstIndex := r.log[0].Index
-	if r.getLastLogIndex() < index || firstIndex > index {
-		return le, false
-	} else {
-		return r.log[index-firstIndex], true
-	}
+	return y
 }
 
-// Messages that can be passed from the Raft RPC server to the main loop for AppendEntries
-type AppendEntriesInput struct {
-	arg      *pb.AppendEntriesArgs
-	response chan pb.AppendEntriesRet
-}
-
-// Messages that can be passed from the Raft RPC server to the main loop for VoteInput
-type VoteInput struct {
-	arg      *pb.RequestVoteArgs
-	response chan pb.RequestVoteRet
-}
-
-func (r *Raft) AppendEntries(ctx context.Context, arg *pb.AppendEntriesArgs) (*pb.AppendEntriesRet, error) {
-	c := make(chan pb.AppendEntriesRet)
-	r.AppendChan <- AppendEntriesInput{arg: arg, response: c}
-	result := <-c
-	return &result, nil
-}
-
-func (r *Raft) RequestVote(ctx context.Context, arg *pb.RequestVoteArgs) (*pb.RequestVoteRet, error) {
-	c := make(chan pb.RequestVoteRet)
-	r.VoteChan <- VoteInput{arg: arg, response: c}
-	result := <-c
-	return &result, nil
-}
-
-// Compute a random duration in milliseconds
-func randomDuration(r *rand.Rand) time.Duration {
-	// Constant
-	const DurationMax = 4000
-	const DurationMin = 1000
-	return time.Duration(r.Intn(DurationMax-DurationMin)+DurationMin) * time.Millisecond
-}
-
-// Restart the supplied timer using a random timeout based on function above
-func restartTimer(timer *time.Timer, r *rand.Rand) {
-	stopped := timer.Stop()
-	// If stopped is false that means someone stopped before us, which could be due to the timer going off before this,
-	// in which case we just drain notifications.
-	if !stopped {
-		// Loop for any queued notifications
-		for len(timer.C) > 0 {
-			<-timer.C
-		}
-
-	}
-	timer.Reset(randomDuration(r))
-}
-
-// Launch a GRPC service for this Raft peer.
+// launch a GRPC service for this Raft peer
 func RunRaftServer(r *Raft, port int) {
-	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", port)
-	// Create socket that listens on the supplied port
+	// create socket that listens on the supplied port
 	c, err := net.Listen("tcp", portString)
 	if err != nil {
-		// Note the use of Fatalf which will exit the program after reporting the error.
 		log.Fatalf("Could not create listening socket %v", err)
 	}
-	// Create a new GRPC server
+	// create a new GRPC server
 	s := grpc.NewServer()
 
 	pb.RegisterRaftServer(s, r)
 	log.Printf("Going to listen on port %v", port)
 
-	// Start serving, this will block this function and only return when done.
+	// start serving, this will block this function and only return when done.
 	if err := s.Serve(c); err != nil {
 		log.Fatalf("Failed to serve %v", err)
 	}
 }
 
-func connectToPeer(peer string) (pb.RaftClient, error) {
-	backoffConfig := grpc.DefaultBackoffConfig
-	// Choose an aggressive backoff strategy here.
-	backoffConfig.MaxDelay = 500 * time.Millisecond
-	conn, err := grpc.Dial(peer, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
-	// Ensure connection did not fail, which should not happen since this happens in the background
-	if err != nil {
-		return pb.NewRaftClient(nil), err
-	}
-	return pb.NewRaftClient(conn), nil
-}
-
-// The main service loop. All modifications to the KV store are run through here.
-func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
-	raft := Raft{AppendChan: make(chan AppendEntriesInput), VoteChan: make(chan VoteInput)}
-	// Start in a Go routine so it doesn't affect us.
-	go RunRaftServer(&raft, port)
-
+func getPeerClients(peers *arrayPeers) map[string]pb.RaftClient {
 	peerClients := make(map[string]pb.RaftClient)
 
 	for _, peer := range *peers {
@@ -193,132 +58,217 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		peerClients[peer] = client
 		log.Printf("Connected to %v", peer)
 	}
+	return peerClients
+}
 
-	type AppendResponse struct {
-		ret  *pb.AppendEntriesRet
-		err  error
-		peer string
+func connectToPeer(peer string) (pb.RaftClient, error) {
+	backoffConfig := grpc.DefaultBackoffConfig
+	// choose an aggressive backoff strategy here.
+	backoffConfig.MaxDelay = 500 * time.Millisecond
+	conn, err := grpc.Dial(peer, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
+	// ensure connection did not fail, which should not happen since this happens in the background
+	if err != nil {
+		return pb.NewRaftClient(nil), err
 	}
+	return pb.NewRaftClient(conn), nil
+}
 
-	type VoteResponse struct {
-		ret  *pb.RequestVoteRet
-		err  error
-		peer string
+func newVoteCounter(peers *arrayPeers) voteInfo {
+	vote := voteInfo{}
+	vote.mu.Lock()
+	vote.voteRecord = make(map[string]bool)
+	for _, peer := range *peers {
+		vote.voteRecord[peer] = false
 	}
+	vote.voteCount = 1
+	vote.mu.Unlock()
+	return vote
+}
+
+// The main service loop. All modifications to the KV store are run through here.
+func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
+	raft := Raft{AppendChan: make(chan AppendEntriesInput), VoteChan: make(chan VoteInput)}
+	// start in a Go routine so it doesn't affect us.
+	go RunRaftServer(&raft, port)
+	peerClients := getPeerClients(peers)
+
 	appendResponseChan := make(chan AppendResponse)
 	voteResponseChan := make(chan VoteResponse)
 
-	// Create a timer and start running it
-	timer := time.NewTimer(randomDuration(r))
-	heartBeatTicker := time.NewTicker(100 * time.Millisecond)
-	if raft.state != leader {
-		heartBeatTicker.Stop()
-	}
-
 	raft.mu.Lock()
-	raft.quorumSize = int64(len(peerClients))/2 + 1
-	raft.state = follower
+	raft.randSeed = r
+	raft.peers = peers
+	raft.timer = time.NewTimer(randomDuration(r))
+	raft.heartBeatTicker = time.NewTicker(100 * time.Millisecond) //100ms heartbeat interval
+	raft.me = id
+	if len(peerClients)%2 == 0 {
+		raft.quorumSize = int64(len(peerClients))/2 + 1
+	} else {
+		raft.quorumSize = int64(len(peerClients))/2 + 2 //e.g. 4 total nodes will need 3 to form a quorum
+	}
 	raft.currentTerm = 0
+	raft.lastApplied = int64(-1)
 	raft.votedFor = ""
-	raft.addLogEntry(logEntry{0, 0, nil})
+	raft.addLogEntry(&pb.LogEntry{Term: 0, Index: 0, Command: nil})
+	// to start as follower
+	raft.fallbackToFollower()
 	raft.mu.Unlock()
 
-
+	// to track voting count
 	var vote voteInfo
 
 	// Run forever handling inputs from various channels
 	for {
 		select {
-		case <-timer.C:
-			// The timer went off.
-			log.Printf("Timeout, becomes a candidate requesting vote...")
-			heartBeatTicker.Stop()
+		/** election timeout -> candidate **/
+		case <-raft.timer.C:
+			log.Printf("Election timeout: %s becomes a candidate requesting vote.", raft.me)
 
+			//initialize vote info every time it becomes candidate
+			vote = newVoteCounter(peers)
+
+			//send a vote request to all peers
+			raft.sendVoteRequests(peerClients, voteResponseChan)
+
+			// This will also take care of any pesky timeouts that happened while processing the operation.
+			// this also means within timeout period without receiving majority votes, split votes etc...
+			// it will trigger the election process again
+			raft.restartTimer()
+
+		/** client request handling **/
+		case op := <-s.C:
 			raft.mu.Lock()
-			raft.state = candidate
-			raft.currentTerm++
-			raft.votedFor = id
-			lastLogIndex := raft.getLastLogIndex()
-			lastLogTerm := int64(0)
-			if lastLogIndex != 0 {
-				lastLogTerm = raft.getLastLogTerm()
+			if raft.state == leader {
+				index := raft.getLastLogIndex() + 1
+				//add the client request to the leader's log first (but it is not yet committed)
+				raft.addLogEntry(&pb.LogEntry{Term: raft.currentTerm, Index: index, Command: &op.command})
+				raft.clientsResponse[index] = op.response
+				//instantly send append entry after receiving client request and added to leader's log
+				raft.sendApeendEntries(peerClients, appendResponseChan)
+			} else {
+				//redirect result to send the client to the right leader
+				op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: raft.leader}}}
 			}
 			raft.mu.Unlock()
 
-			vote = voteInfo{} //initialize vote info every time it becomes candidate
-			vote.mu.Lock()
-			vote.voteRecord = make(map[string]bool)
-			for _, peer := range *peers {
-				vote.voteRecord[peer] = false
-			}
-			vote.voteCount = 1
-			vote.mu.Unlock()
-
-			for p, c := range peerClients {
-				// Send in parallel so we don't wait for each client.
-				go func(c pb.RaftClient, p string) {
-					ret, err := c.RequestVote(context.Background(), 
-								&pb.RequestVoteArgs{Term: raft.currentTerm, 
-													CandidateID: id, 
-													LastLogIndex: lastLogIndex, 
-													LastLogTerm: lastLogTerm})
-					voteResponseChan <- VoteResponse{ret: ret, err: err, peer: p}
-				}(c, p)
-			}
-			// This will also take care of any pesky timeouts that happened while processing the operation.
-			// this also means within timeout period without receiving majority votes, split votes etc... 
-			// it will trigger the election process again
-			restartTimer(timer, r)
-		case op := <-s.C:
-			// We received an operation from a client
-			// TODO: Figure out if you can actually handle the request here. If not use the Redirect result to send the
-			// client elsewhere.
-			// TODO: Use Raft to make sure it is safe to actually run the command.
-			s.HandleCommand(op) //do it only after commit
-		case <- heartBeatTicker.C:
-			//send heartbeat
+		/** send heartbeats to followers to maintain authority **/
+		case <-raft.heartBeatTicker.C:
 			log.Printf("Heartbeat timeout ...")
-			for p, c := range peerClients {
-				// Send in parallel so we don't wait for each client.
-				go func(c pb.RaftClient, p string) {
-					ret, err := c.AppendEntries(context.Background(), 
-								&pb.AppendEntriesArgs{Term: raft.currentTerm,
-												  	  LeaderID: id,
-												      PrevLogIndex: 0, 
-												      PrevLogTerm: 0,
-												      LeaderCommit: 0,
-												      Entries: nil})
-					appendResponseChan <- AppendResponse{ret: ret, err: err, peer: p}
-				}(c, p)
+
+			//the sendApeendEntries function will determine if the message
+			//will be heartbeat or carring a log to be replicated
+			raft.sendApeendEntries(peerClients, appendResponseChan)
+
+		/** handle append entry request from other raft peers **/
+		case ae := <-raft.AppendChan:
+			log.Printf("Received append entry from %v.", ae.arg.LeaderID)
+
+			raft.mu.Lock()
+			res := pb.AppendEntriesRet{Term: raft.currentTerm, Success: false}
+			//reject appendEntries if our current term is larger
+			if ae.arg.Term < raft.currentTerm {
+				res.Term = raft.currentTerm
+				res.Success = false
+				ae.response <- res
+				raft.mu.Unlock()
+				break
 			}
 
-		case ae := <-raft.AppendChan:
-			// We received an AppendEntries request from a Raft peer
-			// TODO figure out what to do here, what we do is entirely wrong.
-			log.Printf("Received append entry from %v", ae.arg.LeaderID)
-			ae.response <- pb.AppendEntriesRet{Term: 1, Success: true}
+			//increase the term if we see a newer one,
+			//and transit to follower if we ever get an appendEntries call & the term is >= ours
+			if ae.arg.Term > raft.currentTerm || raft.state != follower {
+				raft.fallbackToFollower()
+				raft.currentTerm = ae.arg.Term
+
+				res.Term = ae.arg.Term
+			}
+
+			//save the current leader
+			raft.leader = ae.arg.LeaderID
+
+			//Verify the last log entry
+			if ae.arg.PrevLogIndex > 0 {
+				lastLogIndex := raft.getLastLogIndex()
+				lastLogTerm := raft.getLastLogTerm()
+
+				var prevLogTerm int64
+				if ae.arg.PrevLogIndex == lastLogIndex {
+					prevLogTerm = lastLogTerm
+				} else {
+					entry, _ := raft.getLogEntry(ae.arg.PrevLogIndex)
+					prevLogTerm = entry.Term
+				}
+
+				if ae.arg.PrevLogTerm != prevLogTerm {
+					log.Printf("Previous log term mis-match: ours: %d remote: %d",
+						prevLogTerm, ae.arg.PrevLogTerm)
+					res.Success = false
+				}
+			}
+
+			//process any new entries
+			if len(ae.arg.Entries) > 0 {
+				//delete any conflicting entries, skip duplicates
+				lastLogIndex := raft.getLastLogIndex()
+				var newEntries []*pb.LogEntry
+				for i, entry := range ae.arg.Entries {
+					if entry.Index > lastLogIndex {
+						newEntries = ae.arg.Entries[i:1]
+						break
+					}
+					storeEntry, _ := raft.getLogEntry(entry.Index)
+					if entry.Term != storeEntry.Term {
+						log.Printf("Clearing log suffix from %d to %d", entry.Index, lastLogIndex)
+						raft.deleteEntryFrom(entry.Index)
+						break
+					}
+					newEntries = ae.arg.Entries[i:]
+				}
+
+				if n := len(newEntries); n > 0 {
+					//append the new entries
+					for _, entry := range newEntries {
+						raft.addLogEntry(entry)
+					}
+				}
+			}
+
+			//update the commit index
+			if ae.arg.LeaderCommit > 0 && ae.arg.LeaderCommit > raft.commitIndex {
+				index := min(raft.getLastLogIndex(), ae.arg.LeaderCommit)
+				raft.commitIndex = index
+
+				//process the committed log entries if any
+				raft.ProcessLogs(s)
+			}
+
+			res.Success = true
+			ae.response <- res
+
+			raft.mu.Unlock()
+
 			// This will also take care of any pesky timeouts that happened while processing the operation.
-			restartTimer(timer, r)
+			raft.restartTimer()
+
+		/** handle vote request from other raft peers **/
 		case vreq := <-raft.VoteChan:
-			// We received a RequestVote RPC from a raft peer
-			// TODO: Fix this.
 			raft.mu.Lock()
 			log.Printf("Received vote request from %v", vreq.arg.CandidateID)
 			resp := pb.RequestVoteRet{
-						Term: raft.currentTerm, 
-						VoteGranted: false,
-						CandidateID: id,
-					}
+				Term:        raft.currentTerm,
+				VoteGranted: false,
+				CandidateID: id,
+			}
 
 			if vreq.arg.Term < raft.currentTerm {
-				log.Printf("Rejecting vote request from %v since current term is greater than request vote term (%d, %d)", 
+				log.Printf("Rejecting vote request from %v since current term is greater than request vote term (%d, %d)",
 					vreq.arg.CandidateID, raft.currentTerm, vreq.arg.Term)
 			} else if vreq.arg.Term > raft.currentTerm {
 				resp.Term = vreq.arg.Term
 				resp.VoteGranted = true
-				//TO DO: if is leader, step down process
+				// if is leader, step down process
 				if raft.state == leader {
-
+					raft.fallbackToFollower()
 				}
 				raft.currentTerm = vreq.arg.Term
 				raft.lastVoteTerm = vreq.arg.Term
@@ -336,10 +286,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				}
 
 				if lastLogTerm > vreq.arg.LastLogTerm {
-					log.Printf("Rejecting vote request from %v since our last term is greater (%d, %d)", 
+					log.Printf("Rejecting vote request from %v since our last term is greater (%d, %d)",
 						vreq.arg.CandidateID, lastLogTerm, vreq.arg.LastLogTerm)
-				} else if lastLogTerm == vreq.arg.LastLogTerm  && lastLogIndex > vreq.arg.LastLogIndex {
-					log.Printf("Rejecting vote request from %v since our last index is greater (%d, %d)", 
+				} else if lastLogTerm == vreq.arg.LastLogTerm && lastLogIndex > vreq.arg.LastLogIndex {
+					log.Printf("Rejecting vote request from %v since our last index is greater (%d, %d)",
 						vreq.arg.CandidateID, lastLogIndex, vreq.arg.LastLogIndex)
 				} else {
 					resp.VoteGranted = true
@@ -350,12 +300,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			raft.mu.Unlock()
 
 			vreq.response <- resp
-			restartTimer(timer, r)
+			raft.restartTimer()
 
+		/** handle vote response from other raft peers **/
 		case vres := <-voteResponseChan:
-			// We received a response to a previou vote request.
-			// TODO: Fix this
-
 			// If this peer is elected as leader, should stop the timer?
 			// When the leader crash-> restart / revert back to follower, need to restartTimer immediately.
 			if vres.err != nil {
@@ -373,7 +321,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						log.Printf("Newer term discovered, fallback to follower state.")
 						//fallback to follower
 						raft.currentTerm = vres.ret.Term
-						raft.state = follower
+						raft.fallbackToFollower()
 					} else {
 						vote.mu.Lock()
 						if vote.voteRecord[vres.ret.CandidateID] == false {
@@ -381,17 +329,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 							vote.voteCount++
 							if vote.voteCount >= raft.quorumSize {
 								log.Printf("Won election. Granted votes: %d", vote.voteCount)
-								raft.state = leader
-								heartBeatTicker = time.NewTicker(100 * time.Millisecond)
-								//initialise peer log status tracking
-								raft.nextIndex = make(map[string]int64)
-								raft.matchIndex = make(map[string]int64)
-								index := raft.getLastLogIndex() + 1
-								for _, peer := range *peers {
-									raft.nextIndex[peer] = index
-									raft.matchIndex[peer] = 0
-								}
-								timer.Stop()
+								// to be a leader, and leader state prep
+								raft.leaderStatePrep()
 							}
 						}
 						vote.mu.Unlock()
@@ -400,10 +339,51 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				raft.mu.Unlock()
 			}
 
+		/** handle append entry response from other raft peers **/
 		case ar := <-appendResponseChan:
 			// We received a response to a previous AppendEntries RPC call
-			log.Printf("Got append entries response from %v", ar.peer)
+			if ar.err != nil {
+				// Do not do Fatalf here since the peer might be gone but we should survive.
+				log.Printf("Error calling RPC %v", ar.err)
+			} else {
+				raft.mu.Lock()
+				if raft.state == leader {
+					if ar.ret.Success {
+						log.Printf("Got success append entries response from %v", ar.peer)
+
+						prevLogIndex := raft.nextIndex[ar.peer] - 1
+						raft.nextIndex[ar.peer] = prevLogIndex + raft.appendedEntriesLen[ar.peer] + 1
+						raft.matchIndex[ar.peer] = prevLogIndex + raft.appendedEntriesLen[ar.peer]
+						n := raft.matchIndex[ar.peer]
+						//the matched index is beyond leader's commitIndex and it is in leader's current term
+						//if majority is reached, it is saved to commit that matchedIndex
+						if entry, _ := raft.getLogEntry(n); n > raft.commitIndex && entry.Term == raft.currentTerm {
+							matchCount := int64(1)
+							for _, peer := range *peers {
+								if raft.matchIndex[peer] >= n {
+									matchCount++
+								}
+							}
+							if matchCount > raft.quorumSize {
+								raft.commitIndex = n
+								//apply to State Machine
+								raft.ProcessLogs(s)
+							}
+						}
+					} else {
+						log.Printf("Got failed append entries response from %v", ar.peer)
+
+						//if fail, decrement nextIndex for that peer
+						//and retry append entry
+						raft.nextIndex[ar.peer]--
+						raft.sendApeendEntriesTo(ar.peer, peerClients[ar.peer], appendResponseChan)
+					}
+				}
+
+				raft.mu.Unlock()
+			}
 		}
 	}
+
 	log.Printf("Strange to arrive here")
 }
