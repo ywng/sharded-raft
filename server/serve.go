@@ -106,16 +106,17 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	//first dummy term for indexing convenience
 	raft.addLogEntry(&pb.LogEntry{Term: 0, Index: 0, Command: nil})
 
-	//it need some time to get the peer server started,
-	//so sleep for a while before starting the raft logic processing
-	//as follower with an election timeout
-	time.Sleep(15 * time.Second)
+	//start as follower with an election timeout
 	raft.fallbackToFollower()
 
 	//raft.mu.Unlock()
 
 	// to track voting count
 	var vote voteInfo
+
+	//make the first election timeout large 
+	//because the append entries requests from existing leaders take time to deliver when the peer just re-started
+	restartTimer(raft.electionTimer, 20*time.Second)
 
 	// Run forever handling inputs from various channels
 	for {
@@ -275,7 +276,6 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			resp := pb.RequestVoteRet{
 				Term:        raft.currentTerm,
 				VoteGranted: false,
-				CandidateID: id,
 			}
 
 			if vreq.arg.Term < raft.currentTerm {
@@ -326,10 +326,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			// When the leader crash-> restart / revert back to follower, need to restartTimer immediately.
 			if vres.err != nil {
 				// Do not do Fatalf here since the peer might be gone but we should survive.
-				log.Printf("Error calling RPC %v", vres.err)
+				log.Printf("Vote request RPC call error (%s): %v", vres.peer, vres.err)
 			} else {
 				log.Printf("Got response to vote request from %v", vres.peer)
-				log.Printf("Peers %s granted %v term %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
+				log.Printf("Peers %s granted %v for term %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
 
 				//raft.mu.Lock()
 				//if not candidate state => already reached majority / reverted to follower
@@ -342,8 +342,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						raft.fallbackToFollower()
 					} else {
 						vote.mu.Lock()
-						if vote.voteRecord[vres.ret.CandidateID] == false {
-							vote.voteRecord[vres.ret.CandidateID] = true
+						if vote.voteRecord[vres.peer] == false {
+							vote.voteRecord[vres.peer] = true
 							vote.voteCount++
 							if vote.voteCount >= raft.quorumSize {
 								log.Printf("Won election. Granted votes: %d", vote.voteCount)
@@ -364,7 +364,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			// We received a response to a previous AppendEntries RPC call
 			if ar.err != nil {
 				// Do not do Fatalf here since the peer might be gone but we should survive.
-				log.Printf("Error calling RPC %v", ar.err)
+				log.Printf("Append entry request RPC call error (%s): %v", ar.peer, ar.err)
 			} else {
 				//raft.mu.Lock()
 				if raft.state == leader {

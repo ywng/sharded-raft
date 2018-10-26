@@ -204,14 +204,14 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 
 	for p, c := range peerClients {
 		// Send in parallel so we don't wait for each client.
+		log.Printf("Send vote request to %s, currentTerm: %d, lastLogIndex: %d, lastLogTerm: %d",
+			p, r.currentTerm, lastLogIndex, lastLogTerm)
 		go func(c pb.RaftClient, p string) {
 			ret, err := c.RequestVote(context.Background(),
 				&pb.RequestVoteArgs{Term: r.currentTerm,
 					CandidateID:  r.me,
 					LastLogIndex: lastLogIndex,
 					LastLogTerm:  lastLogTerm})
-			log.Printf("Send vote request to %s, currentTerm: %d, lastLogIndex: %d, lastLogTerm: %d",
-				p, r.currentTerm, lastLogIndex, lastLogTerm)
 			voteResponseChan <- VoteResponse{ret: ret, err: err, peer: p}
 		}(c, p)
 	}
@@ -272,13 +272,12 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 	}
 
 	// Send in parallel so we don't wait for each client.
+	log.Printf("Sent append entry request to %s, prevLogIndex: %d, prevLogTerm: %d, commitIndex: %d, entriesLen: %d.",
+		p, prevLogIndex, prevLogTerm, r.commitIndex, int64(len(args.Entries)))
 	go func(c pb.RaftClient, p string) {
 		ret, err := c.AppendEntries(context.Background(), args)
 		appendResponseChan <- AppendResponse{ret: ret, err: err, peer: p}
 	}(c, p)
-
-	log.Printf("Sent append entry request to %s, prevLogIndex: %d, prevLogTerm: %d, commitIndex: %d, entriesLen: %d.",
-		p, prevLogIndex, prevLogTerm, r.commitIndex, int64(len(args.Entries)))
 }
 
 // put an append entry request to the given raft server's (var r) Append Entry Channel
