@@ -99,6 +99,8 @@ message AppendEntriesArgs {
 message AppendEntriesRet {
     int64 term = 1;
     bool success = 2;
+    int64 prevLogIndex = 3;
+    int64 numEntries = 4;
 }
 
 // Input to RequestVote

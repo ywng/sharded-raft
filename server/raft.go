@@ -17,6 +17,11 @@ const (
 	leader    = 3
 	// for cluster membership change
 	//shutdown  = 4
+
+	//different timeout in ms
+	ELECTION_TIMEOUT_LOWER_BOUND = 1000
+	ELECTION_TIMEOUT_UPPER_BOUND = 4000
+	HEARTBEAT_TIMEOUT            = 500
 )
 
 type AppendResponse struct {
@@ -75,13 +80,11 @@ type Raft struct {
 	matchIndex map[string]int64
 	//map of logIndex -> client response ch
 	clientsResponse map[int64]chan pb.Result
-	//map of peer -> numberOfEntriesAppended
-	appendedEntriesLen map[string]int64
 
 	//timer & ticker for election timeout and heartbeat
-	timer           *time.Timer
-	heartBeatTicker *time.Ticker
-	randSeed        *rand.Rand
+	electionTimer  *time.Timer
+	heartBeatTimer *time.Timer
+	randSeed       *rand.Rand
 
 	//peers
 	peers *arrayPeers
@@ -96,42 +99,27 @@ type Raft struct {
 func (r *Raft) leaderStatePrep() {
 	r.state = leader
 	r.leader = r.me
-	// reset the heartbeat ticking
-	r.heartBeatTicker = time.NewTicker(100 * time.Millisecond)
+	// reset the heartbeat timer & stop election timer
+	restartTimer(r.heartBeatTimer, HEARTBEAT_TIMEOUT*time.Millisecond)
+	stopTimer(r.electionTimer)
 
 	//initialise leader's volatile state
 	r.nextIndex = make(map[string]int64)
 	r.matchIndex = make(map[string]int64)
 	r.clientsResponse = make(map[int64]chan pb.Result)
-	r.appendedEntriesLen = make(map[string]int64)
 
 	index := r.getLastLogIndex() + 1
 	for _, peer := range *r.peers {
 		r.nextIndex[peer] = index
 		r.matchIndex[peer] = 0
 	}
-	r.timer.Stop()
 }
 
 func (r *Raft) fallbackToFollower() {
 	r.state = follower
-	r.heartBeatTicker.Stop()
-	r.restartTimer()
-}
-
-// restart the supplied timer using a random timeout based on function above
-func (r *Raft) restartTimer() {
-	stopped := r.timer.Stop()
-	// If stopped is false that means someone stopped before us, which could be due to the timer going off before this,
-	// in which case we just drain notifications.
-	if !stopped {
-		// Loop for any queued notifications
-		for len(r.timer.C) > 0 {
-			<-r.timer.C
-		}
-
-	}
-	r.timer.Reset(randomDuration(r.randSeed))
+	// reset the election timer & stop heartbeat timer
+	restartTimer(r.electionTimer, randomDuration(r.randSeed))
+	stopTimer(r.heartBeatTimer)
 }
 
 func (r *Raft) deleteEntryFrom(index int64) {
@@ -187,15 +175,24 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 	for r.commitIndex > r.lastApplied {
 		r.lastApplied++
 		entry, _ := r.getLogEntry(r.lastApplied)
-		op := InputChannelType{command: *entry.Command,
-			response: r.clientsResponse[entry.Index]}
+
+		//only leader reply to client's request
+		//if not leader, just output to a dummy channel / nil channel
+		var responseChan chan pb.Result
+		if r.state == leader {
+			responseChan = r.clientsResponse[entry.Index]
+		} else {
+			responseChan = nil
+		}
+		op := InputChannelType{command: *entry.Command, response: responseChan}
 		s.HandleCommand(op)
+
+		log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Command.Operation)
 	}
 }
 
 // this is used to construct and send a vote request to all peers
 func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteResponseChan chan VoteResponse) {
-	r.mu.Lock()
 	r.state = candidate
 	r.currentTerm++
 	r.votedFor = r.me
@@ -204,7 +201,6 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 	if lastLogIndex != 0 {
 		lastLogTerm = r.getLastLogTerm()
 	}
-	r.mu.Unlock()
 
 	for p, c := range peerClients {
 		// Send in parallel so we don't wait for each client.
@@ -230,8 +226,6 @@ func (r *Raft) sendApeendEntries(peerClients map[string]pb.RaftClient, appendRes
 
 // this is used to construct and send an append entry request to given peer (var p)
 func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan chan AppendResponse) {
-	r.mu.Lock()
-
 	var isHeartBeat bool
 	if r.getLastLogIndex() >= r.nextIndex[p] {
 		isHeartBeat = false
@@ -243,9 +237,9 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 	prevLogIndex := r.nextIndex[p] - 1
 
 	if prevLogIndex != 0 {
-		e, ok := r.getLogEntry(prevLogIndex)
+		entry, ok := r.getLogEntry(prevLogIndex)
 		if ok {
-			prevLogTerm = e.Term
+			prevLogTerm = entry.Term
 		} else {
 			//cannot get the  prevLogIndex,
 			//it is snapshot... sned install snapshot to peer
@@ -255,13 +249,13 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 
 	var args *pb.AppendEntriesArgs
 	if isHeartBeat {
-		args = &pb.AppendEntriesArgs{Term: r.currentTerm,
+		args = &pb.AppendEntriesArgs{
+			Term:         r.currentTerm,
 			LeaderID:     r.me,
 			PrevLogIndex: prevLogIndex,
 			PrevLogTerm:  prevLogTerm,
 			LeaderCommit: r.commitIndex,
 			Entries:      nil}
-		r.appendedEntriesLen[p] = 0
 	} else {
 		if _, ok := r.getLogEntry(prevLogIndex + 1); !ok {
 			//cannot get the  prevLogIndex,
@@ -275,7 +269,6 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 			PrevLogTerm:  prevLogTerm,
 			LeaderCommit: r.commitIndex,
 			Entries:      entries}
-		r.appendedEntriesLen[p] = int64(len(entries))
 	}
 
 	// Send in parallel so we don't wait for each client.
@@ -284,7 +277,8 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 		appendResponseChan <- AppendResponse{ret: ret, err: err, peer: p}
 	}(c, p)
 
-	r.mu.Unlock()
+	log.Printf("Sent append entry request to %s, prevLogIndex: %d, prevLogTerm: %d, commitIndex: %d, entriesLen: %d.",
+		p, prevLogIndex, prevLogTerm, r.commitIndex, int64(len(args.Entries)))
 }
 
 // put an append entry request to the given raft server's (var r) Append Entry Channel
@@ -303,12 +297,4 @@ func (r *Raft) RequestVote(ctx context.Context, arg *pb.RequestVoteArgs) (*pb.Re
 	r.VoteChan <- VoteInput{arg: arg, response: c}
 	result := <-c
 	return &result, nil
-}
-
-//=================== healper functions ============================
-// compute a random duration in milliseconds
-func randomDuration(r *rand.Rand) time.Duration {
-	const DurationMax = 4000
-	const DurationMin = 1000
-	return time.Duration(r.Intn(DurationMax-DurationMin)+DurationMin) * time.Millisecond
 }
