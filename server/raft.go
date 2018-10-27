@@ -272,8 +272,8 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 	}
 
 	// Send in parallel so we don't wait for each client.
-	log.Printf("Sent append entry request to %s, prevLogIndex: %d, prevLogTerm: %d, commitIndex: %d, entriesLen: %d.",
-		p, prevLogIndex, prevLogTerm, r.commitIndex, int64(len(args.Entries)))
+	log.Printf("Sent append entry request to %s, senderCurrentTerm: %d, prevLogIndex: %d, prevLogTerm: %d, commitIndex: %d, entriesLen: %d.",
+		p, r.currentTerm, prevLogIndex, prevLogTerm, r.commitIndex, int64(len(args.Entries)))
 	go func(c pb.RaftClient, p string) {
 		ret, err := c.AppendEntries(context.Background(), args)
 		appendResponseChan <- AppendResponse{ret: ret, err: err, peer: p}

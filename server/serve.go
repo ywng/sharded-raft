@@ -114,10 +114,6 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	// to track voting count
 	var vote voteInfo
 
-	//make the first election timeout large 
-	//because the append entries requests from existing leaders take time to deliver when the peer just re-started
-	restartTimer(raft.electionTimer, 20*time.Second)
-
 	// Run forever handling inputs from various channels
 	for {
 		select {
@@ -164,7 +160,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		case <-raft.heartBeatTimer.C:
 			log.Printf("Heartbeat timeout ...")
 
-			log.Printf("raft.state: %d", raft.state)
+			//log.Printf("raft.state: %d", raft.state)
 
 			//the sendApeendEntries function will determine if the message
 			//will be heartbeat or carring a log to be replicated
@@ -177,95 +173,99 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			log.Printf("Received append entry from %v.", ae.arg.LeaderID)
 
 			//raft.mu.Lock()
-			res := pb.AppendEntriesRet{Term: raft.currentTerm,
-				Success:      false,
+			res := pb.AppendEntriesRet{
+				Term:         raft.currentTerm,
+				Success:      true, //first default it to true
 				PrevLogIndex: ae.arg.PrevLogIndex,
 				NumEntries:   int64(len(ae.arg.Entries))}
+
 			//reject appendEntries if our current term is larger
 			if ae.arg.Term < raft.currentTerm {
 				res.Term = raft.currentTerm
 				res.Success = false
-				ae.response <- res
-				//raft.mu.Unlock()
-				break
-			}
-
-			//increase the term if we see a newer one,
-			//and transit to follower if we ever get an appendEntries call & the term is >= ours
-			if ae.arg.Term > raft.currentTerm || raft.state != follower {
-				raft.fallbackToFollower()
-				raft.currentTerm = ae.arg.Term
-
-				res.Term = ae.arg.Term
-			}
-
-			//save the current leader
-			raft.leader = ae.arg.LeaderID
-
-			//Verify the last log entry
-			if ae.arg.PrevLogIndex > 0 {
-				lastLogIndex := raft.getLastLogIndex()
-				lastLogTerm := raft.getLastLogTerm()
-				//log.Printf("Peer: %s, lastLogIndex: %d, lastLogTerm: %d, commitIndex: %d.", raft.me, lastLogIndex, lastLogTerm, raft.commitIndex)
-
-				var prevLogTerm int64
-				if ae.arg.PrevLogIndex == lastLogIndex {
-					prevLogTerm = lastLogTerm
-				} else {
-					entry, _ := raft.getLogEntry(ae.arg.PrevLogIndex)
-					prevLogTerm = entry.Term
+			} else {
+				//increase the term if we see a newer one,
+				//and transit to follower if we ever get an appendEntries call & the term is >= ours
+				if ae.arg.Term > raft.currentTerm || raft.state != follower {
+					log.Printf("Append Entry Request from %v: current term is older (%d vs %d) or it is not follower, fall back to follower.",
+						ae.arg.LeaderID, raft.currentTerm, ae.arg.Term)
+					raft.fallbackToFollower()
+					raft.currentTerm = ae.arg.Term
+					res.Term = ae.arg.Term
 				}
 
-				if ae.arg.PrevLogTerm != prevLogTerm {
-					log.Printf("Previous log term mis-match: ours: %d remote: %d",
-						prevLogTerm, ae.arg.PrevLogTerm)
-					res.Success = false
-				}
-			}
+				//save the current leader
+				raft.leader = ae.arg.LeaderID
 
-			//process any new entries
-			if len(ae.arg.Entries) > 0 {
-				//delete any conflicting entries, skip duplicates
-				lastLogIndex := raft.getLastLogIndex()
-				var newEntries []*pb.LogEntry
-				for i, entry := range ae.arg.Entries {
-					if entry.Index > lastLogIndex {
-						newEntries = ae.arg.Entries[i:1]
-						break
+				//Verify the last log entry
+				if ae.arg.PrevLogIndex > 0 {
+					lastLogIndex := raft.getLastLogIndex()
+					lastLogTerm := raft.getLastLogTerm()
+					//log.Printf("Peer: %s, lastLogIndex: %d, lastLogTerm: %d, commitIndex: %d.", raft.me, lastLogIndex, lastLogTerm, raft.commitIndex)
+
+					var prevLogTerm int64
+					if ae.arg.PrevLogIndex == lastLogIndex {
+						prevLogTerm = lastLogTerm
+					} else if ae.arg.PrevLogIndex > lastLogIndex {
+						res.Success = false
+						prevLogTerm = lastLogTerm
+					} else {
+						entry, _ := raft.getLogEntry(ae.arg.PrevLogIndex)
+						prevLogTerm = entry.Term
 					}
-					storeEntry, _ := raft.getLogEntry(entry.Index)
-					if entry.Term != storeEntry.Term {
-						log.Printf("Clearing log suffix from %d to %d", entry.Index, lastLogIndex)
-						raft.deleteEntryFrom(entry.Index)
-						break
-					}
-					newEntries = ae.arg.Entries[i:]
-				}
 
-				if n := len(newEntries); n > 0 {
-					//append the new entries
-					for _, entry := range newEntries {
-						raft.addLogEntry(entry)
-						log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Command.Operation)
+					if ae.arg.PrevLogTerm != prevLogTerm {
+						log.Printf("Previous log term mis-match: ours: %d remote: %d",
+							prevLogTerm, ae.arg.PrevLogTerm)
+						res.Success = false
 					}
 				}
+
+				//process any new entries if we haven't failed any check
+				if res.Success && len(ae.arg.Entries) > 0 {
+					//delete any conflicting entries, skip duplicates
+					lastLogIndex := raft.getLastLogIndex()
+					var newEntries []*pb.LogEntry
+					for i, entry := range ae.arg.Entries {
+						if entry.Index > lastLogIndex {
+							newEntries = ae.arg.Entries[i:]
+							break
+						}
+						storeEntry, _ := raft.getLogEntry(entry.Index)
+						if entry.Term != storeEntry.Term {
+							log.Printf("Clearing log suffix from %d to %d", entry.Index, lastLogIndex)
+							raft.deleteEntryFrom(entry.Index)
+							newEntries = ae.arg.Entries[i:]
+							break
+						}
+					}
+
+					if n := len(newEntries); n > 0 {
+						//append the new entries
+						for _, entry := range newEntries {
+							raft.addLogEntry(entry)
+							log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Command.Operation)
+						}
+					}
+				}
+
+				//update the commit index if we haven't failed any check
+				if res.Success && ae.arg.LeaderCommit > raft.commitIndex {
+					index := min(raft.getLastLogIndex(), ae.arg.LeaderCommit)
+					raft.commitIndex = index
+					//log.Printf("Peer: %s, commitIndex: %d.", raft.me, raft.commitIndex)
+
+					//process the committed log entries if any
+					raft.ProcessLogs(s)
+				}
 			}
 
-			//update the commit index
-			if ae.arg.LeaderCommit > raft.commitIndex {
-				index := min(raft.getLastLogIndex(), ae.arg.LeaderCommit)
-				raft.commitIndex = index
-				//log.Printf("Peer: %s, commitIndex: %d.", raft.me, raft.commitIndex)
-
-				//process the committed log entries if any
-				raft.ProcessLogs(s)
-			}
-
-			res.Success = true
 			ae.response <- res
 
 			// This will also take care of any pesky timeouts that happened while processing the operation.
-			restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+			if raft.state == follower {
+				restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+			}
 
 			//raft.mu.Unlock()
 
@@ -281,21 +281,9 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			if vreq.arg.Term < raft.currentTerm {
 				log.Printf("Rejecting vote request from %v since current term is greater than request vote term (%d vs %d)",
 					vreq.arg.CandidateID, raft.currentTerm, vreq.arg.Term)
-			} else if vreq.arg.Term > raft.currentTerm {
-				resp.Term = vreq.arg.Term
-				resp.VoteGranted = true
-				// if is leader, step down process
-				if raft.state == leader {
-					raft.fallbackToFollower()
-				}
-				raft.currentTerm = vreq.arg.Term
-				raft.lastVoteTerm = vreq.arg.Term
-				raft.votedFor = vreq.arg.CandidateID
-			} else if raft.lastVoteTerm == vreq.arg.Term && raft.votedFor != "" {
-				if raft.votedFor == vreq.arg.CandidateID {
-					log.Printf("Duplicated vote request from %v", vreq.arg.CandidateID)
-					resp.VoteGranted = true
-				}
+			} else if raft.lastVoteTerm == vreq.arg.Term && raft.votedFor != vreq.arg.CandidateID {
+				log.Printf("Rejecting vote request from %v since already voted for %s for vote term %d.",
+					vreq.arg.CandidateID, raft.votedFor, vreq.arg.Term)
 			} else {
 				lastLogIndex := raft.getLastLogIndex()
 				lastLogTerm := int64(0)
@@ -311,36 +299,49 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						vreq.arg.CandidateID, lastLogIndex, vreq.arg.LastLogIndex)
 				} else {
 					resp.VoteGranted = true
-					raft.lastVoteTerm = vreq.arg.Term
 					raft.votedFor = vreq.arg.CandidateID
+					raft.lastVoteTerm = vreq.arg.Term
+
+					if vreq.arg.Term > raft.currentTerm {
+						log.Printf("Vote Request from %v: current term is older (%d vs %d), fall back to follower.",
+							vreq.arg.CandidateID, raft.currentTerm, vreq.arg.Term)
+						resp.Term = vreq.arg.Term
+						raft.currentTerm = vreq.arg.Term
+						// if is leader/candidate, step down process
+						if raft.state == leader || raft.state == candidate {
+							raft.fallbackToFollower()
+						}
+					}
+
+					//vote granted to candidate, so reset election timer
+					restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
 				}
 			}
+
 			//raft.mu.Unlock()
 
 			vreq.response <- resp
-			restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
 
 		/** handle vote response from other raft peers **/
 		case vres := <-voteResponseChan:
-			// If this peer is elected as leader, should stop the timer?
-			// When the leader crash-> restart / revert back to follower, need to restartTimer immediately.
 			if vres.err != nil {
 				// Do not do Fatalf here since the peer might be gone but we should survive.
 				log.Printf("Vote request RPC call error (%s): %v", vres.peer, vres.err)
 			} else {
 				log.Printf("Got response to vote request from %v", vres.peer)
-				log.Printf("Peers %s granted %v for term %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
+				log.Printf("Peers %s granted %v. The peer's current term is %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
 
 				//raft.mu.Lock()
 				//if not candidate state => already reached majority / reverted to follower
 				if raft.state == candidate {
 					//check if the term is greater than candidate's term
 					if vres.ret.Term > raft.currentTerm {
-						log.Printf("Newer term discovered, fallback to follower state.")
+						log.Printf("Vote Response from %v: current term is older (%d vs %d), fall back to follower.",
+							vres.peer, raft.currentTerm, vres.ret.Term)
 						//fallback to follower
 						raft.currentTerm = vres.ret.Term
 						raft.fallbackToFollower()
-					} else {
+					} else if vres.ret.Term == raft.currentTerm && vres.ret.VoteGranted {
 						vote.mu.Lock()
 						if vote.voteRecord[vres.peer] == false {
 							vote.voteRecord[vres.peer] = true
@@ -368,6 +369,16 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			} else {
 				//raft.mu.Lock()
 				if raft.state == leader {
+					//if replied term > leader current term, fall back to follower
+					if ar.ret.Term > raft.currentTerm {
+						log.Printf("Append Entry Response from %v: current term is older (%d vs %d), fall back to follower.",
+							ar.peer, raft.currentTerm, ar.ret.Term)
+						raft.currentTerm = ar.ret.Term
+						raft.fallbackToFollower()
+						//raft.mu.Unlock()
+						break
+					}
+
 					if ar.ret.Success {
 						log.Printf("Got success append entries response from %v", ar.peer)
 
