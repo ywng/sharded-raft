@@ -177,9 +177,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				Term:         raft.currentTerm,
 				Success:      true, //first default it to true
 				PrevLogIndex: ae.arg.PrevLogIndex,
-				NumEntries:   int64(len(ae.arg.Entries))}
+				NumEntries:   int64(len(ae.arg.Entries)),
+				RequestTerm:  ae.arg.Term,
+			}
 
 			//reject appendEntries if our current term is larger
+			//not from current leader, should NOT reset election timer
 			if ae.arg.Term < raft.currentTerm {
 				res.Term = raft.currentTerm
 				res.Success = false
@@ -206,6 +209,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 					var prevLogTerm int64
 					if ae.arg.PrevLogIndex == lastLogIndex {
 						prevLogTerm = lastLogTerm
+						//if get an AppendEntries with a prevLogIndex beyond th end of the log
+						//same as the term did not match
 					} else if ae.arg.PrevLogIndex > lastLogIndex {
 						res.Success = false
 						prevLogTerm = lastLogTerm
@@ -222,6 +227,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				}
 
 				//process any new entries if we haven't failed any check
+				//only if an existing entry conflicts with a new one (non-heartbeat),
+				//delete the existing entry and all that follow it
 				if res.Success && len(ae.arg.Entries) > 0 {
 					//delete any conflicting entries, skip duplicates
 					lastLogIndex := raft.getLastLogIndex()
@@ -258,14 +265,14 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 					//process the committed log entries if any
 					raft.ProcessLogs(s)
 				}
+
+				//received AppendEntries RPC from current leader, restart election timer
+				if res.Success {
+					restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+				}
 			}
 
 			ae.response <- res
-
-			// This will also take care of any pesky timeouts that happened while processing the operation.
-			if raft.state == follower {
-				restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
-			}
 
 			//raft.mu.Unlock()
 
@@ -276,6 +283,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			resp := pb.RequestVoteRet{
 				Term:        raft.currentTerm,
 				VoteGranted: false,
+				RequestTerm: vreq.arg.Term,
 			}
 
 			if vreq.arg.Term < raft.currentTerm {
@@ -313,7 +321,9 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						}
 					}
 
-					//vote granted to candidate, so reset election timer
+					//vote granted to candidate, only then reset election timer
+					//so servers with the more up-to-datelogs won't be interrupted by outdated servers' elections
+					//less likely of live locks
 					restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
 				}
 			}
@@ -334,6 +344,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				//raft.mu.Lock()
 				//if not candidate state => already reached majority / reverted to follower
 				if raft.state == candidate {
+					//Term confusion: drop any reply that the request was in an older term
+					if vres.ret.RequestTerm < raft.currentTerm {
+						//raft.mu.Unlock()
+						break
+					}
+
 					//check if the term is greater than candidate's term
 					if vres.ret.Term > raft.currentTerm {
 						log.Printf("Vote Response from %v: current term is older (%d vs %d), fall back to follower.",
@@ -369,6 +385,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			} else {
 				//raft.mu.Lock()
 				if raft.state == leader {
+					//Term confusion: drop any reply that the request was in an older term
+					if ar.ret.RequestTerm < raft.currentTerm {
+						//raft.mu.Unlock()
+						break
+					}
+
 					//if replied term > leader current term, fall back to follower
 					if ar.ret.Term > raft.currentTerm {
 						log.Printf("Append Entry Response from %v: current term is older (%d vs %d), fall back to follower.",
@@ -387,8 +409,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						n := raft.matchIndex[ar.peer]
 						log.Printf("peer: %s, peer_matchIndex: %d, peer_nextIndex: %d, leaderCommitIndex: %d.",
 							ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)
-						//the matched index is beyond leader's commitIndex and it is in leader's current term
-						//if majority is reached, it is saved to commit that matchedIndex
+						//the matched index is beyond leader's commitIndex and it is in leader's current term (Figure 8 in the paper)
+						//if majority is reached, it is safe to commit that matchedIndex
 						if entry, _ := raft.getLogEntry(n); n > raft.commitIndex && entry.Term == raft.currentTerm {
 							matchCount := int64(1)
 							log.Printf("entry: %s.", entry)

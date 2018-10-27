@@ -111,6 +111,8 @@ func (r *Raft) leaderStatePrep() {
 	index := r.getLastLogIndex() + 1
 	for _, peer := range *r.peers {
 		r.nextIndex[peer] = index
+		//match index is a conservative measurement of what prefix of the log the leader shares with given followers
+		//which we won't know beforehead, initialised to 0, essentially mean none of entries
 		r.matchIndex[peer] = 0
 	}
 }
@@ -196,6 +198,8 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 	r.state = candidate
 	r.currentTerm++
 	r.votedFor = r.me
+	//clear out the previous term leader, this term leader is not yet known
+	r.leader = ""
 	lastLogIndex := r.getLastLogIndex()
 	lastLogTerm := int64(0)
 	if lastLogIndex != 0 {
