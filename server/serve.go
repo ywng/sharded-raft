@@ -104,7 +104,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	raft.lastApplied = 0
 	raft.votedFor = ""
 	//first dummy term for indexing convenience
-	raft.addLogEntry(&pb.LogEntry{Term: 0, Index: 0, Command: nil})
+	raft.addLogEntry(&pb.Entry{Term: 0, Index: 0, Cmd: nil})
 
 	//start as follower with an election timeout
 	raft.fallbackToFollower()
@@ -141,7 +141,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				log.Printf("Receive client request, command: %s.", op.command.Operation)
 				index := raft.getLastLogIndex() + 1
 				//add the client request to the leader's log first (but it is not yet committed)
-				raft.addLogEntry(&pb.LogEntry{Term: raft.currentTerm, Index: index, Command: &op.command})
+				raft.addLogEntry(&pb.Entry{Term: raft.currentTerm, Index: index, Cmd: &op.command})
 				raft.clientsResponse[index] = op.response
 
 				//instantly send append entry after receiving client request and added to leader's log
@@ -174,11 +174,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 
 			//raft.mu.Lock()
 			res := pb.AppendEntriesRet{
-				Term:         raft.currentTerm,
-				Success:      true, //first default it to true
-				PrevLogIndex: ae.arg.PrevLogIndex,
-				NumEntries:   int64(len(ae.arg.Entries)),
-				RequestTerm:  ae.arg.Term,
+				Term:    raft.currentTerm,
+				Success: true, //first default it to true
 			}
 
 			//reject appendEntries if our current term is larger
@@ -232,7 +229,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				if res.Success && len(ae.arg.Entries) > 0 {
 					//delete any conflicting entries, skip duplicates
 					lastLogIndex := raft.getLastLogIndex()
-					var newEntries []*pb.LogEntry
+					var newEntries []*pb.Entry
 					for i, entry := range ae.arg.Entries {
 						if entry.Index > lastLogIndex {
 							newEntries = ae.arg.Entries[i:]
@@ -251,7 +248,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						//append the new entries
 						for _, entry := range newEntries {
 							raft.addLogEntry(entry)
-							log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Command.Operation)
+							log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Cmd.Operation)
 						}
 					}
 				}
@@ -283,7 +280,6 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			resp := pb.RequestVoteRet{
 				Term:        raft.currentTerm,
 				VoteGranted: false,
-				RequestTerm: vreq.arg.Term,
 			}
 
 			if vreq.arg.Term < raft.currentTerm {
@@ -299,10 +295,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 					lastLogTerm = raft.getLastLogTerm()
 				}
 
-				if lastLogTerm > vreq.arg.LastLogTerm {
+				if lastLogTerm > vreq.arg.LasLogTerm {
 					log.Printf("Rejecting vote request from %v since our last term is greater (%d vs %d)",
-						vreq.arg.CandidateID, lastLogTerm, vreq.arg.LastLogTerm)
-				} else if lastLogTerm == vreq.arg.LastLogTerm && lastLogIndex > vreq.arg.LastLogIndex {
+						vreq.arg.CandidateID, lastLogTerm, vreq.arg.LasLogTerm)
+				} else if lastLogTerm == vreq.arg.LasLogTerm && lastLogIndex > vreq.arg.LastLogIndex {
 					log.Printf("Rejecting vote request from %v since our last index is greater (%d vs %d)",
 						vreq.arg.CandidateID, lastLogIndex, vreq.arg.LastLogIndex)
 				} else {
@@ -345,7 +341,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				//if not candidate state => already reached majority / reverted to follower
 				if raft.state == candidate {
 					//Term confusion: drop any reply that the request was in an older term
-					if vres.ret.RequestTerm < raft.currentTerm {
+					if vres.requestTerm < raft.currentTerm {
 						//raft.mu.Unlock()
 						break
 					}
@@ -386,7 +382,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				//raft.mu.Lock()
 				if raft.state == leader {
 					//Term confusion: drop any reply that the request was in an older term
-					if ar.ret.RequestTerm < raft.currentTerm {
+					if ar.requestTerm < raft.currentTerm {
 						//raft.mu.Unlock()
 						break
 					}
@@ -404,8 +400,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 					if ar.ret.Success {
 						log.Printf("Got success append entries response from %v", ar.peer)
 
-						raft.nextIndex[ar.peer] = max(raft.nextIndex[ar.peer], ar.ret.PrevLogIndex+ar.ret.NumEntries+1)
-						raft.matchIndex[ar.peer] = max(raft.matchIndex[ar.peer], ar.ret.PrevLogIndex+ar.ret.NumEntries)
+						raft.nextIndex[ar.peer] = max(raft.nextIndex[ar.peer], ar.matchIndex+1)
+						raft.matchIndex[ar.peer] = max(raft.matchIndex[ar.peer], ar.matchIndex)
 						n := raft.matchIndex[ar.peer]
 						log.Printf("peer: %s, peer_matchIndex: %d, peer_nextIndex: %d, leaderCommitIndex: %d.",
 							ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)

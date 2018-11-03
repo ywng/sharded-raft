@@ -25,15 +25,18 @@ const (
 )
 
 type AppendResponse struct {
-	ret  *pb.AppendEntriesRet
-	err  error
-	peer string
+	ret         *pb.AppendEntriesRet
+	err         error
+	peer        string
+	matchIndex  int64
+	requestTerm int64
 }
 
 type VoteResponse struct {
-	ret  *pb.RequestVoteRet
-	err  error
-	peer string
+	ret         *pb.RequestVoteRet
+	err         error
+	peer        string
+	requestTerm int64
 }
 
 // Messages that can be passed from the Raft RPC server to the main loop for AppendEntries
@@ -69,7 +72,7 @@ type Raft struct {
 	currentTerm  int64
 	votedFor     string
 	lastVoteTerm int64
-	log          []*pb.LogEntry
+	log          []*pb.Entry
 
 	//this raft server volatile states
 	commitIndex int64
@@ -146,14 +149,14 @@ func (r *Raft) getLogLen() int64 {
 	return int64(len(r.log))
 }
 
-func (r *Raft) addLogEntry(entry *pb.LogEntry) {
+func (r *Raft) addLogEntry(entry *pb.Entry) {
 	r.log = append(r.log, entry)
 }
 
 // the logic of index-firstIndex is for snapshot logic
 // after snapshot, the entry.Index is not necessarily the index of the log array
-func (r *Raft) getLogEntry(index int64) (*pb.LogEntry, bool) {
-	var entry *pb.LogEntry
+func (r *Raft) getLogEntry(index int64) (*pb.Entry, bool) {
+	var entry *pb.Entry
 	if r.getLogLen() == 0 {
 		return entry, false
 	}
@@ -165,7 +168,7 @@ func (r *Raft) getLogEntry(index int64) (*pb.LogEntry, bool) {
 	}
 }
 
-func (r *Raft) getEntryFrom(index int64) []*pb.LogEntry {
+func (r *Raft) getEntryFrom(index int64) []*pb.Entry {
 	firstIndex := r.log[0].Index
 	sliceIndex := index - firstIndex
 	return r.log[sliceIndex:]
@@ -186,10 +189,10 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 		} else {
 			responseChan = nil
 		}
-		op := InputChannelType{command: *entry.Command, response: responseChan}
+		op := InputChannelType{command: *entry.Cmd, response: responseChan}
 		s.HandleCommand(op)
 
-		log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Command.Operation)
+		log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Cmd.Operation)
 	}
 }
 
@@ -215,8 +218,8 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 				&pb.RequestVoteArgs{Term: r.currentTerm,
 					CandidateID:  r.me,
 					LastLogIndex: lastLogIndex,
-					LastLogTerm:  lastLogTerm})
-			voteResponseChan <- VoteResponse{ret: ret, err: err, peer: p}
+					LasLogTerm:   lastLogTerm})
+			voteResponseChan <- VoteResponse{ret: ret, err: err, peer: p, requestTerm: r.currentTerm}
 		}(c, p)
 	}
 }
@@ -280,7 +283,8 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 		p, r.currentTerm, prevLogIndex, prevLogTerm, r.commitIndex, int64(len(args.Entries)))
 	go func(c pb.RaftClient, p string) {
 		ret, err := c.AppendEntries(context.Background(), args)
-		appendResponseChan <- AppendResponse{ret: ret, err: err, peer: p}
+		appendResponseChan <- AppendResponse{ret: ret, err: err, peer: p,
+			matchIndex: args.PrevLogIndex + int64(len(args.Entries)), requestTerm: r.currentTerm}
 	}(c, p)
 }
 
