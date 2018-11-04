@@ -35,10 +35,8 @@ func main() {
 		log.Fatalf("Failed to dial GRPC server %v", err)
 	}
 	log.Printf("Connected")
-
 	// Create a KvStore client
 	kvc := pb.NewKvStoreClient(conn)
-	
 	// Clear KVC
 	res, err := kvc.Clear(context.Background(), &pb.Empty{})
 	if err != nil {

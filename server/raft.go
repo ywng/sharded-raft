@@ -8,7 +8,7 @@ import (
 
 	context "golang.org/x/net/context"
 
-	"github.com/nyu-distributed-systems-fa18/lab-2-raft-ywng/pb"
+	"github.com/nyu-distributed-systems-fa18/starter-code-lab2/pb"
 )
 
 const (

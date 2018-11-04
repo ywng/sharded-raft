@@ -5,12 +5,13 @@ import (
 	"log"
 	rand "math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 
-	"github.com/nyu-distributed-systems-fa18/lab-2-raft-ywng/pb"
+	"github.com/nyu-distributed-systems-fa18/starter-code-lab2/pb"
 )
 
 type voteInfo struct {
@@ -152,7 +153,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			} else {
 				//redirect result to send the client to the right leader
 				log.Printf("Peer %s is not leader, redirecting client request to leader %s.", raft.me, raft.leader)
-				op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: raft.leader}}}
+				op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: strings.Split(raft.leader, ":")[0]}}}
 			}
 			//raft.mu.Unlock()
 

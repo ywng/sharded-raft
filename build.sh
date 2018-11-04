@@ -9,6 +9,11 @@ go fmt
 go get -v ./...
 go build .
 
+cd ../client
+go fmt
+go get -v ./...
+go build .
+
 cd ..
 ./create-docker-image.sh
 
