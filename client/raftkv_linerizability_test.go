@@ -8,14 +8,15 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
+	//"log"
 
 	"github.com/nyu-distributed-systems-fa18/lab-2-raft-ywng/porcupine"
 )
 
 type RaftKvInput struct {
-	op    uint8 // 0 => get, 1 => put, 2 => clear, 3 => cas
+	op    uint8 // 0 => get, 1 => set, 2 => cas, //we don't do clear because it is equivalent to set a key to ""
 	key   string
-	value string
+	value string // used for set and cas new value
 	oldValue string // used for cas from argument
 }
 
@@ -54,17 +55,18 @@ func getRaftKvModel() porcupine.Model {
 			inp := input.(RaftKvInput)
 			out := output.(RaftKvOutput)
 			st := state.(string)
+
+			//log.Printf("input: %v", inp)
+			//log.Printf("ouput: %v", out)
+			//log.Printf("state: %v", st)
 			if inp.op == 0 {
 				// get
 				return out.value == st, state
 			} else if inp.op == 1 {
-				// put
+				// set
 				return true, inp.value
-			} else if inp.op == 2 {
-				// clear
-				return true, ""
 			} else {
-				//cas
+				// cas
 				ok := (inp.oldValue == st && out.ok) || (inp.oldValue != st && !out.ok)
 				result := st
 				if inp.oldValue == st {
@@ -86,11 +88,11 @@ func parseRaftKvLog(filename string) []porcupine.Event {
 	reader := bufio.NewReader(file)
 
 	invokeGet, _ := regexp.Compile(`{:process (\d+), :type :invoke, :f :get, :key "(.*)", :value nil}`)
-	invokePut, _ := regexp.Compile(`{:process (\d+), :type :invoke, :f :put, :key "(.*)", :value "(.*)"}`)
-	//invokeAppend, _ := regexp.Compile(`{:process (\d+), :type :invoke, :f :append, :key "(.*)", :value "(.*)"}`)
+	invokeSet, _ := regexp.Compile(`{:process (\d+), :type :invoke, :f :set, :key "(.*)", :value "(.*)"}`)
+	invokeCas, _ := regexp.Compile(`{:process (\d+), :type :invoke, :f :cas, :key "(.*)", :value "(.*)", :oldValue "(.*)"}`)
 	returnGet, _ := regexp.Compile(`{:process (\d+), :type :ok, :f :get, :key ".*", :value "(.*)"}`)
-	returnPut, _ := regexp.Compile(`{:process (\d+), :type :ok, :f :put, :key ".*", :value ".*"}`)
-	//returnAppend, _ := regexp.Compile(`{:process (\d+), :type :ok, :f :append, :key ".*", :value ".*"}`)
+	returnSet, _ := regexp.Compile(`{:process (\d+), :type :ok, :f :set, :key ".*", :value ".*"}`)
+	returnCas, _ := regexp.Compile(`{:process (\d+), :type :ok, :f :cas, :success "(.*)", :key ".*", :value "(.*)"}`)
 
 	var events []porcupine.Event = nil
 
@@ -115,32 +117,50 @@ func parseRaftKvLog(filename string) []porcupine.Event {
 			events = append(events, porcupine.Event{porcupine.CallEvent, RaftKvInput{op: 0, key: args[2]}, id})
 			procIdMap[proc] = id
 			id++
-		case invokePut.MatchString(line):
-			args := invokePut.FindStringSubmatch(line)
+		case invokeSet.MatchString(line):
+			args := invokeSet.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			events = append(events, porcupine.Event{porcupine.CallEvent, RaftKvInput{op: 1, key: args[2], value: args[3]}, id})
 			procIdMap[proc] = id
 			id++
-		
+		case invokeCas.MatchString(line):
+			args := invokeCas.FindStringSubmatch(line)
+			proc, _ := strconv.Atoi(args[1])
+			events = append(events, porcupine.Event{porcupine.CallEvent, 
+						RaftKvInput{op: 2, key: args[2], value: args[3], oldValue: args[4]}, id})
+			procIdMap[proc] = id
+			id++
 		case returnGet.MatchString(line):
 			args := returnGet.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
 			events = append(events, porcupine.Event{porcupine.ReturnEvent, RaftKvOutput{ok: true, value: args[2]}, matchId})
-		case returnPut.MatchString(line):
-			args := returnPut.FindStringSubmatch(line)
+		case returnSet.MatchString(line):
+			args := returnSet.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
 			matchId := procIdMap[proc]
 			delete(procIdMap, proc)
-			events = append(events, porcupine.Event{porcupine.ReturnEvent, RaftKvOutput{}, matchId})
-	
+			events = append(events, porcupine.Event{porcupine.ReturnEvent, RaftKvOutput{ok: true}, matchId})
+		case returnCas.MatchString(line):
+			args := returnCas.FindStringSubmatch(line)
+			proc, _ := strconv.Atoi(args[1])
+			matchId := procIdMap[proc]
+			delete(procIdMap, proc)
+			if args[2] == "true" {
+				events = append(events, porcupine.Event{porcupine.ReturnEvent, RaftKvOutput{ok: true, value: args[3]}, matchId})
+			} else {
+				events = append(events, porcupine.Event{porcupine.ReturnEvent, RaftKvOutput{ok: false, value: args[3]}, matchId})
+			}
+			
 		}
 	}
 
 	for _, matchId := range procIdMap {
 		events = append(events, porcupine.Event{porcupine.ReturnEvent, RaftKvOutput{}, matchId})
 	}
+
+	//log.Printf("%v", events)
 
 	return events
 }
@@ -155,8 +175,8 @@ func checkRaftKv(t *testing.T, logName string, correct bool) {
 	}
 }
 
-func TestRaftKv1ClientOk(t *testing.T) {
-	checkRaftKv(t, "c01-ok", true)
+func TestRaftKv1ClientSequential(t *testing.T) {
+	checkRaftKv(t, "c1-sequential", true)
 }
 
 func TestRaftKv1ClientBad(t *testing.T) {

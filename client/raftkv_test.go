@@ -20,7 +20,11 @@ import (
 	"regexp"
 	"strings"
 	"os/exec"
+	"os"
 	"strconv"
+	"fmt"
+	"runtime"
+	"bufio"
 
 	"time"
 
@@ -136,22 +140,12 @@ func getCurrentLeaderIDByGetRequest(t *testing.T) (string) {
 	return leaderId
 }
 
-func fireSetRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string) {
-	//set a key 
-	putReq := &pb.KeyValue{Key: key, Value: val}
-	res, err := kvc.Set(context.Background(), putReq)
-	if err != nil {
-		t.Fatalf("Error while setting a key. err: %v", err)
-	}
-	
-	if res.GetKv().Key != key || res.GetKv().Value != val {
-		t.Fatalf("Set key returned the wrong response")
-	}
-	t.Logf("Got response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
-}
-
-func fireGetRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string) {
+func fireGetRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string, w *bufio.Writer) {
 	req := &pb.Key{Key: key}
+	if w != nil {
+		w.WriteString(getRequestObjFormatter(t, key))
+	}
+
 	res, err := kvc.Get(context.Background(), req)
 	if err != nil {
 		t.Logf("Request error %v", err)
@@ -160,7 +154,105 @@ func fireGetRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string) 
 	if res.GetKv().Key != key || res.GetKv().Value != val {
 		t.Fatalf("We fail to get back what we expect.")
 	}
+
+	if w != nil {
+		w.WriteString(getResponseObjFormatter(t, res.GetKv().Key, res.GetKv().Value))
+	}
 	t.Logf("Got response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
+}
+
+func fireSetRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string, w *bufio.Writer) {
+	//set a key 
+	putReq := &pb.KeyValue{Key: key, Value: val}
+	if w != nil {
+		w.WriteString(setRequestObjFormatter(t, key, val))
+	}
+
+	res, err := kvc.Set(context.Background(), putReq)
+	if err != nil {
+		t.Fatalf("Error while setting a key. err: %v", err)
+	}
+	
+	if res.GetKv().Key != key || res.GetKv().Value != val {
+		t.Fatalf("Set key returned the wrong response")
+	}
+
+	if w != nil {
+		w.WriteString(setResponseObjFormatter(t, res.GetKv().Key, res.GetKv().Value))
+	}
+	t.Logf("Got response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
+}
+
+func fireCasRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string, oldVal string, success bool, w *bufio.Writer) {
+	casReq := &pb.CASArg{Kv: &pb.KeyValue{Key: key, Value: oldVal}, Value: &pb.Value{Value: val}}
+	if w != nil {
+		w.WriteString(casRequestObjFormatter(t, key, val, oldVal))
+	}
+
+	res, err := kvc.CAS(context.Background(), casReq)
+	if err != nil {
+		t.Fatalf("Request error %v", err)
+	}
+
+	if w != nil {
+		w.WriteString(casResponseObjFormatter(t, success, res.GetKv().Key, res.GetKv().Value))
+	}
+	t.Logf("Got response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
+	if success {
+		if res.GetKv().Key != key || res.GetKv().Value != val {
+			t.Fatalf("Get returned the wrong response")
+		} 
+	} 
+}
+
+func fireClearRequest(t *testing.T, kvc pb.KvStoreClient) {
+	_, err := kvc.Clear(context.Background(), &pb.Empty{})
+	if err != nil {
+		t.Fatalf("Could not clear")
+	}
+}
+
+func Goid(t *testing.T) int {
+    defer func()  {
+        if err := recover(); err != nil {
+            t.Logf("panic recover:panic info:%v", err)     }
+    }()
+
+    var buf [64]byte
+    n := runtime.Stack(buf[:], false)
+    idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
+    id, err := strconv.Atoi(idField)
+    if err != nil {
+        t.Fatalf("cannot get goroutine id: %v", err)
+    }
+    return id
+}
+
+//format the logs for linearizability test
+func getRequestObjFormatter(t *testing.T, key string) string {
+	return fmt.Sprintf("{:process %d, :type :invoke, :f :get, :key \"%v\", :value nil}\n", Goid(t), key)
+}
+func getResponseObjFormatter(t *testing.T, key string, val string) string {
+	return fmt.Sprintf("{:process %d, :type :ok, :f :get, :key \"%v\", :value \"%v\"}\n", Goid(t), key, val)
+
+}
+func setRequestObjFormatter(t *testing.T, key string, val string) string {
+	return fmt.Sprintf("{:process %d, :type :invoke, :f :set, :key \"%v\", :value \"%v\"}\n", Goid(t), key, val)
+}
+func setResponseObjFormatter(t *testing.T, key string, val string) string {
+	return fmt.Sprintf("{:process %d, :type :ok, :f :set, :key \"%v\", :value \"%v\"}\n", Goid(t), key, val)
+}
+func casRequestObjFormatter(t *testing.T, key string, val string, oldVal string) string {
+	return fmt.Sprintf("{:process %d, :type :invoke, :f :cas, :key \"%v\", :value \"%v\", :oldValue \"%v\"}\n", Goid(t), key, val, oldVal)
+}
+func casResponseObjFormatter(t *testing.T, success bool, key string, val string) string {
+	return fmt.Sprintf("{:process %d, :type :ok, :f :cas, :success \"%t\", :key \"%v\", :value \"%v\"}\n", Goid(t), success, key, val)
+}
+	
+func check(e error) {
+    if e != nil {
+        panic(e)
+    }
 }
 
 /*
@@ -189,7 +281,7 @@ func TestRedirectionHandling(t *testing.T) {
  */
 func TestSurviveLeaderFailure(t *testing.T) {
 	leaderId, kvc := getKVConnectionToRaftLeader(t)
-	fireSetRequest(t, kvc, "test_leader_failure", "2")
+	fireSetRequest(t, kvc, "test_leader_failure", "2", nil)
 
 	//fail the leader
 	failGivenRaftServer(t, leaderId)
@@ -197,7 +289,7 @@ func TestSurviveLeaderFailure(t *testing.T) {
 	time.Sleep(20 * time.Second)
 
 	_, kvcNextLeader := getKVConnectionToRaftLeader(t)
-	fireGetRequest(t, kvcNextLeader, "test_leader_failure", "2")
+	fireGetRequest(t, kvcNextLeader, "test_leader_failure", "2", nil)
 
 	//re-launch the previously killed server for other tests
 	relaunchGivenRaftServer(t, leaderId)
@@ -213,7 +305,7 @@ func TestSurviveLeaderFailure(t *testing.T) {
  */
 func TestTolerateFFailures(t *testing.T) {
 	leaderId, kvc := getKVConnectionToRaftLeader(t)
-	fireSetRequest(t, kvc, "test_f_nodes_failure", "3")
+	fireSetRequest(t, kvc, "test_f_nodes_failure", "3", nil)
 
 	//fail f Raft servers
 	//here we starts 5 servers, f = 2
@@ -223,7 +315,7 @@ func TestTolerateFFailures(t *testing.T) {
 	failGivenRaftServer(t, strconv.Itoa((nextServerToTry+2) % NUM_RAFT_SERVERS))
 	time.Sleep(20 * time.Second)
 	
-	fireGetRequest(t, kvc, "test_f_nodes_failure", "3")
+	fireGetRequest(t, kvc, "test_f_nodes_failure", "3", nil)
 
 	//re-launch the previously killed server for other tests
 	relaunchGivenRaftServer(t, strconv.Itoa((nextServerToTry+1) % NUM_RAFT_SERVERS))
@@ -264,7 +356,7 @@ func testCommitedLogsShouldSurviveAfterRejoin(t *testing.T, failedNodesList []st
 	time.Sleep(20 * time.Second)
 
 	_, kvc := getKVConnectionToRaftLeader(t)
-	fireSetRequest(t, kvc, key, val)
+	fireSetRequest(t, kvc, key, val, nil)
 
 	for _, node := range failedNodesList {
 		relaunchGivenRaftServer(t, node)
@@ -272,7 +364,7 @@ func testCommitedLogsShouldSurviveAfterRejoin(t *testing.T, failedNodesList []st
 	time.Sleep(20 * time.Second)
 
 	_, kvc = getKVConnectionToRaftLeader(t)
-	fireGetRequest(t, kvc, key, val)
+	fireGetRequest(t, kvc, key, val, nil)
 }
 
 /*
@@ -306,26 +398,36 @@ func TestRequestHandlingDuringNonLeaderFailures(t *testing.T) {
 	the requests should be producing results as expected in the requests firing ordering, as no concurrency is here.
  */
 func TestSerialRequestsCorrectness(t *testing.T) {
+	f, err := os.Create("raft_test_data/c1-sequential.txt")
+    check(err)
+    defer f.Close()
+    w := bufio.NewWriter(f)
+
 	_, kvc := getKVConnectionToRaftLeader(t)
 	
-	fireSetRequest(t, kvc, "x", "1")
-	fireSetRequest(t, kvc, "y", "2")
+	fireSetRequest(t, kvc, "x", "1", w)
+	fireSetRequest(t, kvc, "y", "2", w)
 
-	fireGetRequest(t, kvc, "x", "1")
+	fireGetRequest(t, kvc, "x", "1", w)
 
-	fireSetRequest(t, kvc, "x", "2")
-	fireSetRequest(t, kvc, "z", "3")
-	fireSetRequest(t, kvc, "x", "3")
-	fireSetRequest(t, kvc, "y", "4")
+	fireSetRequest(t, kvc, "x", "2", w)
+	fireSetRequest(t, kvc, "z", "3", w)
+	fireSetRequest(t, kvc, "x", "3", w)
+	fireSetRequest(t, kvc, "y", "4", w)
 
-	fireGetRequest(t, kvc, "y", "4")
-	fireGetRequest(t, kvc, "x", "3")
+	fireGetRequest(t, kvc, "y", "4", w)
+	fireGetRequest(t, kvc, "x", "3", w)
 
-	fireSetRequest(t, kvc, "z", "3")
+	fireSetRequest(t, kvc, "z", "3", w)
 
-	fireGetRequest(t, kvc, "x", "3")
-	fireGetRequest(t, kvc, "y", "4")
-	fireGetRequest(t, kvc, "z", "3")
+	fireCasRequest(t, kvc, "z", "4", "3", true, w)
+	fireCasRequest(t, kvc, "x", "5", "4", false, w)
+
+	fireGetRequest(t, kvc, "x", "3", w)
+	fireGetRequest(t, kvc, "y", "4", w)
+	fireGetRequest(t, kvc, "z", "4", w)
+
+	w.Flush()
 }
 
 /*
@@ -361,7 +463,7 @@ func testConcurrentSet(t *testing.T, kvc pb.KvStoreClient, parallel bool) {
 			if parallel {
 				st.Parallel()
 			}
-			fireSetRequest(t, kvc, tt.key, tt.val)
+			fireSetRequest(t, kvc, tt.key, tt.val, nil)
 		})
 	}
 }
@@ -390,7 +492,7 @@ func testConcurrentGet(t *testing.T, kvc pb.KvStoreClient, parallel bool) {
 			if parallel {
 				st.Parallel()
 			}
-			fireGetRequest(t, kvc, tt.key, tt.val)
+			fireGetRequest(t, kvc, tt.key, tt.val, nil)
 		})
 	}
 }
