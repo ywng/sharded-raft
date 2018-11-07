@@ -179,22 +179,6 @@ func TestRaftKv1ClientSequential(t *testing.T) {
 	checkRaftKv(t, "c1-sequential", true)
 }
 
-func TestRaftKv1ClientBad(t *testing.T) {
-	checkRaftKv(t, "c01-bad", false)
-}
-
-func TestRaftKv10ClientsOk(t *testing.T) {
-	checkRaftKv(t, "c10-ok", true)
-}
-
-func TestRaftKv10ClientsBad(t *testing.T) {
-	checkRaftKv(t, "c10-bad", false)
-}
-
-func TestRaftKv50ClientsOk(t *testing.T) {
-	checkRaftKv(t, "c50-ok", true)
-}
-
-func TestRaftKv50ClientsBad(t *testing.T) {
-	checkRaftKv(t, "c50-bad", false)
+func TestRaftKvManyClientConcurrentGetSetCas(t *testing.T) {
+	checkRaftKv(t, "c-many-concurrent-get-set-cas", true)
 }
