@@ -14,14 +14,14 @@ import (
 )
 
 type RaftKvInput struct {
-	op    uint8 // 0 => get, 1 => set, 2 => cas, //we don't do clear because it is equivalent to set a key to ""
-	key   string
-	value string // used for set and cas new value
+	op       uint8 // 0 => get, 1 => set, 2 => cas, //we don't do clear because it is equivalent to set a key to ""
+	key      string
+	value    string // used for set and cas new value
 	oldValue string // used for cas from argument
 }
 
 type RaftKvOutput struct {
-	ok      bool // used for cas
+	ok    bool // used for cas
 	value string
 }
 
@@ -126,8 +126,8 @@ func parseRaftKvLog(filename string) []porcupine.Event {
 		case invokeCas.MatchString(line):
 			args := invokeCas.FindStringSubmatch(line)
 			proc, _ := strconv.Atoi(args[1])
-			events = append(events, porcupine.Event{porcupine.CallEvent, 
-						RaftKvInput{op: 2, key: args[2], value: args[3], oldValue: args[4]}, id})
+			events = append(events, porcupine.Event{porcupine.CallEvent,
+				RaftKvInput{op: 2, key: args[2], value: args[3], oldValue: args[4]}, id})
 			procIdMap[proc] = id
 			id++
 		case returnGet.MatchString(line):
@@ -152,7 +152,7 @@ func parseRaftKvLog(filename string) []porcupine.Event {
 			} else {
 				events = append(events, porcupine.Event{porcupine.ReturnEvent, RaftKvOutput{ok: false, value: args[3]}, matchId})
 			}
-			
+
 		}
 	}
 
