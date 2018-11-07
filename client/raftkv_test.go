@@ -37,8 +37,8 @@ import (
 )
 
 const (
-	//launch-tool/launch.py boot 5
-	NUM_RAFT_SERVERS = 5
+	//launch-tool/launch.py boot 11
+	NUM_RAFT_SERVERS = 11
 )
 
 type LockedWriter struct {
@@ -273,6 +273,44 @@ func check(e error) {
 }
 
 /*
+	Test if clear requests can really clear all existing records
+*/
+func TestClear(t *testing.T) {
+	_, kvc := getKVConnectionToRaftLeader(t)
+
+	fireSetRequest(t, kvc, "x", "99", nil, true)
+	fireSetRequest(t, kvc, "y", "88", nil, true)
+	fireSetRequest(t, kvc, "z", "18", nil, true)
+
+	fireGetRequest(t, kvc, "x", "99", nil, true)
+	fireGetRequest(t, kvc, "y", "88", nil, true)
+	fireGetRequest(t, kvc, "z", "18", nil, true)
+
+	fireClearRequest(t, kvc)
+
+	fireGetRequest(t, kvc, "x", "", nil, true)
+	fireGetRequest(t, kvc, "y", "", nil, true)
+	fireGetRequest(t, kvc, "z", "", nil, true)
+}
+
+/*
+	Test if cas requests are behaving correctly
+*/
+func TestCas(t *testing.T) {
+	_, kvc := getKVConnectionToRaftLeader(t)
+
+	fireSetRequest(t, kvc, "x", "99", nil, true)
+	fireSetRequest(t, kvc, "y", "88", nil, true)
+	fireSetRequest(t, kvc, "z", "18", nil, true)
+
+	fireCasRequest(t, kvc, "x", "199", "199", "99", nil, true)
+	fireCasRequest(t, kvc, "y", "88", "88", "0000", nil, true)
+	fireCasRequest(t, kvc, "k", "199", "199", "", nil, true) // "" empty string is equivalent to unitialized value
+	fireCasRequest(t, kvc, "m", "199", "", "??", nil, true)  // unitialised key will not match the old value, fail cas
+	fireCasRequest(t, kvc, "z", "118", "18", "000", nil, true)
+}
+
+/*
 	Test if a Raft server can redirect us to the leader if it is not the leader.
 */
 func TestRedirectionHandling(t *testing.T) {
@@ -299,6 +337,8 @@ func TestRedirectionHandling(t *testing.T) {
 func TestSurviveLeaderFailure(t *testing.T) {
 	leaderId, kvc := getKVConnectionToRaftLeader(t)
 	fireSetRequest(t, kvc, "test_leader_failure", "2", nil, true)
+	fireSetRequest(t, kvc, "test_leader_failure2", "21", nil, true)
+	fireCasRequest(t, kvc, "test_leader_failure2", "999", "21", "99", nil, true)
 
 	//fail the leader
 	failGivenRaftServer(t, leaderId)
@@ -307,6 +347,7 @@ func TestSurviveLeaderFailure(t *testing.T) {
 
 	_, kvcNextLeader := getKVConnectionToRaftLeader(t)
 	fireGetRequest(t, kvcNextLeader, "test_leader_failure", "2", nil, true)
+	fireGetRequest(t, kvcNextLeader, "test_leader_failure2", "21", nil, true)
 
 	//re-launch the previously killed server for other tests
 	relaunchGivenRaftServer(t, leaderId)
@@ -323,6 +364,7 @@ func TestSurviveLeaderFailure(t *testing.T) {
 func TestTolerateFFailures(t *testing.T) {
 	leaderId, kvc := getKVConnectionToRaftLeader(t)
 	fireSetRequest(t, kvc, "test_f_nodes_failure", "3", nil, true)
+	fireSetRequest(t, kvc, "test_f_nodes_failure2", "31", nil, true)
 
 	//fail f Raft servers
 	//here we starts 5 servers, f = 2
@@ -330,13 +372,20 @@ func TestTolerateFFailures(t *testing.T) {
 	nextServerToTry, _ = strconv.Atoi(leaderId)
 	failGivenRaftServer(t, strconv.Itoa((nextServerToTry+1)%NUM_RAFT_SERVERS))
 	failGivenRaftServer(t, strconv.Itoa((nextServerToTry+2)%NUM_RAFT_SERVERS))
+	failGivenRaftServer(t, strconv.Itoa((nextServerToTry+3)%NUM_RAFT_SERVERS))
+	failGivenRaftServer(t, strconv.Itoa((nextServerToTry+4)%NUM_RAFT_SERVERS))
+	failGivenRaftServer(t, strconv.Itoa((nextServerToTry+5)%NUM_RAFT_SERVERS))
 	time.Sleep(20 * time.Second)
 
 	fireGetRequest(t, kvc, "test_f_nodes_failure", "3", nil, true)
+	fireGetRequest(t, kvc, "test_f_nodes_failure2", "31", nil, true)
 
 	//re-launch the previously killed server for other tests
 	relaunchGivenRaftServer(t, strconv.Itoa((nextServerToTry+1)%NUM_RAFT_SERVERS))
 	relaunchGivenRaftServer(t, strconv.Itoa((nextServerToTry+2)%NUM_RAFT_SERVERS))
+	relaunchGivenRaftServer(t, strconv.Itoa((nextServerToTry+3)%NUM_RAFT_SERVERS))
+	relaunchGivenRaftServer(t, strconv.Itoa((nextServerToTry+4)%NUM_RAFT_SERVERS))
+	relaunchGivenRaftServer(t, strconv.Itoa((nextServerToTry+5)%NUM_RAFT_SERVERS))
 	//give time for relaunch and let it be stable
 	time.Sleep(20 * time.Second)
 }
@@ -599,4 +648,172 @@ func TestConcurrentGetSetCas(t *testing.T) {
 
 	wg.Wait()
 	w.writer.Flush()
+}
+
+/*
+	Concurrent requests of high contention,
+	simulate several clients are making exactly the same set of requests concurrently.
+	We will do the linerizability check if it is correct.
+
+	The corresponding linerizability test case by porcupine is
+	- TestRaftKvHighConcurrentContention
+*/
+func TestHighConcurrentContention(t *testing.T) {
+	f, err := os.Create("raft_test_data/c-high-concurrent-contention.txt")
+	check(err)
+	defer f.Close()
+	w := &LockedWriter{writer: bufio.NewWriter(f)}
+
+	r := rand.Intn(5)
+
+	_, kvc := getKVConnectionToRaftLeader(t)
+
+	fireClearRequest(t, kvc)
+
+	tc := []struct {
+		op     int //0: get, 1:set, 2:cas
+		key    string
+		val    string
+		oldVal string
+	}{
+		{1, "hello", "hi", ""},
+		{1, "test_f_nodes_failure", "3", ""},
+		{1, "test_leader_failure", "2", ""},
+		{1, "abc", "def", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{0, "hello", "", ""},
+		{1, "nyu", "New New York University", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{0, "hello", "", ""},
+		{0, "OOP", "", ""},
+		{0, "nyu", "", ""},
+		{1, "OOP", "Object Oriented Programming", ""},
+		{1, "test_f_nodes_failure", "9", ""},
+		{1, "abc", "defdsds", ""},
+		{1, "hello", "hihi???", ""},
+		{1, "test_f_nodes_failure", "4", ""},
+		{1, "test_leader_failure", "8", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{0, "hello", "", ""},
+		{1, "test_f_nodes_failure", "9d0", ""},
+		{0, "OOP", "", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{1, "abcde", "defee", ""},
+		{0, "nyu", "", ""},
+		{1, "nyu", "New New York University? seriously", ""},
+		{0, "nyuabc", "", ""},
+		{0, "nyu", "", ""},
+		{1, "test_f_nodes_failure", "91", ""},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(20) //simulate 5 clients making the same set of requests concurrently
+
+	for i := 1; i <= 20; i++ {
+		go func() {
+			time.Sleep(time.Duration(r) * time.Millisecond)
+			defer wg.Done()
+			//each simulated client fires the same set of requests
+			for _, tt := range tc {
+				tt := tt
+				switch tt.op {
+				case 0:
+					fireGetRequest(t, kvc, tt.key, tt.val, w, false)
+				case 1:
+					fireSetRequest(t, kvc, tt.key, tt.val, w, false)
+				case 2:
+					fireCasRequest(t, kvc, tt.key, tt.val, "", tt.oldVal, w, false)
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	w.writer.Flush()
+}
+
+/*
+	Concurrent requests at the same time with nodes failure happening (<= f)
+	We will do the linerizability check if it is correct.
+
+	The corresponding linerizability test case by porcupine is
+	- TestRaftKvConcurrentDuringNodeFailure
+*/
+func TestConcurrentDuringNodeFailure(t *testing.T) {
+	f, err := os.Create("raft_test_data/c-concurrent-during-node-failure.txt")
+	check(err)
+	defer f.Close()
+	w := &LockedWriter{writer: bufio.NewWriter(f)}
+
+	r := rand.Intn(15)
+
+	leaderId, kvc := getKVConnectionToRaftLeader(t)
+
+	fireClearRequest(t, kvc)
+
+	tc := []struct {
+		op     int //0: get, 1:set, 2:cas
+		key    string
+		val    string
+		oldVal string
+	}{
+		{1, "hello", "hi", ""},
+		{1, "test_f_nodes_failure", "3", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{0, "hello", "", ""},
+		{0, "OOP", "", ""},
+		{0, "nyu", "", ""},
+		{1, "OOP", "Object Oriented Programming", ""},
+		{1, "test_f_nodes_failure", "9", ""},
+		{1, "abc", "defdsds", ""},
+		{1, "hello", "hihi???", ""},
+		{1, "test_f_nodes_failure", "4", ""},
+		{1, "test_f_nodes_failure", "9d0", ""},
+		{0, "OOP", "", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{1, "abcde", "defee", ""},
+		{0, "nyu", "", ""},
+		{1, "nyu", "New New York University? seriously", ""},
+		{0, "nyuabc", "", ""},
+		{0, "nyu", "", ""},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(10) //simulate 5 clients making the same set of requests concurrently
+
+	var nextServerToTry int
+	nextServerToTry, _ = strconv.Atoi(leaderId)
+
+	for i := 1; i <= 10; i++ {
+		i := i
+		go func() {
+			time.Sleep(time.Duration(r) * time.Millisecond)
+			if i <= 5 {
+				failGivenRaftServer(t, strconv.Itoa((nextServerToTry+i)%NUM_RAFT_SERVERS))
+			}
+			defer wg.Done()
+			//each simulated client fires the same set of requests
+			for _, tt := range tc {
+				tt := tt
+				switch tt.op {
+				case 0:
+					fireGetRequest(t, kvc, tt.key, tt.val, w, false)
+				case 1:
+					fireSetRequest(t, kvc, tt.key, tt.val, w, false)
+				case 2:
+					fireCasRequest(t, kvc, tt.key, tt.val, "", tt.oldVal, w, false)
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	w.writer.Flush()
+
+	time.Sleep(60 * time.Second)
+	//restart the failed server for other testing
+	for i := 1; i <= 5; i++ {
+		relaunchGivenRaftServer(t, strconv.Itoa((nextServerToTry+i)%NUM_RAFT_SERVERS))
+	}
+	time.Sleep(30 * time.Second)
 }

@@ -182,3 +182,11 @@ func TestRaftKv1ClientSequential(t *testing.T) {
 func TestRaftKvManyClientConcurrentGetSetCas(t *testing.T) {
 	checkRaftKv(t, "c-many-concurrent-get-set-cas", true)
 }
+
+func TestRaftKvHighConcurrentContention(t *testing.T) {
+	checkRaftKv(t, "c-high-concurrent-contention", true)
+}
+
+func TestRaftKvConcurrentDuringNodeFailure(t *testing.T) {
+	checkRaftKv(t, "c-concurrent-during-node-failure", true)
+}

@@ -17,3 +17,12 @@ To use Kubernetes with this project use `./create-docker-image.sh` to first crea
 -   `./launch.py shutdown` will kill all pods, shutting down the cluster.
 -   `./launch.py client-url <n>` can be used to get the URL for the nth pod. One example use of this is `./client
     $(../launch-tool/launch.py client-url 1)` to get a client to connect to pod 1.
+
+### To Build the code
+`./build.sh` will automatically sourcing the file, go fmt it and build it. It will also call `./create-docker-image.sh` and `./launch.py boot 3`. When the script completes, there will be a Kubernetes clusters of 3 nodes running the raft implementation.
+
+If the Kubernetes has some problem, can call `./boot.sh` to restart the Kubernetes.
+
+### Testing
+./client/raftkv_test.go: Simulate the client requests to the raft kv-store under different scenarios, e.g. Leader failure, 2f nodes failed, failed nodes rejoin etc.
+./client/raftkv_linerizability_test.go: check the linerizability of client requests using porcupine.
