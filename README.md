@@ -1,4 +1,4 @@
-Lab 2 Started Code
+Project Sharded Raft
 ------------------
 
 The code itself is in `server`. `client` contains a rather trivial client designed to test lab0. For testing you can use
@@ -25,4 +25,5 @@ If the Kubernetes has some problem, can call `./boot.sh` to restart the Kubernet
 
 ### Testing
 ./client/raftkv_test.go: Simulate the client requests to the raft kv-store under different scenarios, e.g. Leader failure, 2f nodes failed, failed nodes rejoin etc.
+
 ./client/raftkv_linerizability_test.go: check the linerizability of client requests using porcupine.
