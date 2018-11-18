@@ -1,4 +1,4 @@
-Project Sharded Raft
+Project: Sharded Raft
 ------------------
 
 The code itself is in `server`. `client` contains a rather trivial client designed to test lab0. For testing you can use
