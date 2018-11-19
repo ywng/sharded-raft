@@ -5,7 +5,7 @@ import (
 
 	context "golang.org/x/net/context"
 
-	"github.com/nyu-distributed-systems-fa18/starter-code-lab2/pb"
+	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
 )
 
 // The struct for data to send over channel

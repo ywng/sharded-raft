@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"log"
 	rand "math/rand"
 	"sync"
@@ -8,7 +10,7 @@ import (
 
 	context "golang.org/x/net/context"
 
-	"github.com/nyu-distributed-systems-fa18/starter-code-lab2/pb"
+	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
 )
 
 const (
@@ -22,6 +24,7 @@ const (
 	ELECTION_TIMEOUT_LOWER_BOUND = 1000
 	ELECTION_TIMEOUT_UPPER_BOUND = 4000
 	HEARTBEAT_TIMEOUT            = 500
+	LOG_COMPACTION_LIMIT         = 1000 //-1 means no log compaction
 )
 
 type AppendResponse struct {
@@ -59,11 +62,10 @@ type Raft struct {
 	//lock to protect shared access to this raft server state
 	//though in our lab exercise, this shouldn't be a concern
 	//as only one main go routine is accessing the state at any time
-	mu     sync.Mutex
-	me     string
-	leader string
-	//TO DO: we need persister for shutdown and recovery
-	//persister 	*Persister
+	mu        sync.Mutex
+	me        string
+	leader    string
+	persister *Persister // Object to hold the raft persisted states
 
 	state      int64
 	quorumSize int64
@@ -93,10 +95,21 @@ type Raft struct {
 	peers *arrayPeers
 
 	//for snapshot
-	//lastIncludedLogEntry *pb.LogEntry
+	lastSnapshotLogEntry *pb.Entry
 
 	//TO DO: for memershutdown
 	//killServer chan int64
+}
+
+//to save persistent raft states
+func (r *Raft) persist() {
+	write := new(bytes.Buffer)
+	encoder := gob.NewEncoder(write)
+	encoder.Encode(r.currentTerm)
+	encoder.Encode(r.votedFor)
+	encoder.Encode(r.log)
+	data := write.Bytes()
+	r.persister.SaveRaftState(data)
 }
 
 func (r *Raft) leaderStatePrep() {
@@ -174,6 +187,19 @@ func (r *Raft) getEntryFrom(index int64) []*pb.Entry {
 	return r.log[sliceIndex:]
 }
 
+func (r *Raft) Compaction(index int64) {
+	go func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+
+		if index > r.lastSnapshotLogEntry.Index {
+			r.lastSnapshotLogEntry, _ = r.getLogEntry(index)
+			r.log = r.getEntryFrom(index)
+			r.persist()
+		}
+	}()
+}
+
 // this check the raft server's log if any committed but unhandled commands
 // after the command is handled, it will response to the client by HandleCommand function
 func (r *Raft) ProcessLogs(s *KVStore) {
@@ -193,11 +219,26 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 		s.HandleCommand(op)
 
 		log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Cmd.Operation)
+		log.Printf("Size of log: %v", r.persister.RaftStateSize())
+
+		//check if we reach compaction limit, and do compaction
+		if LOG_COMPACTION_LIMIT != -1 && r.persister.RaftStateSize() >= LOG_COMPACTION_LIMIT {
+			write := new(bytes.Buffer)
+			encoder := gob.NewEncoder(write)
+			encoder.Encode(s.store)
+			data := write.Bytes()
+			r.persister.SaveSnapshot(data)
+			log.Printf("Server starts compaction, size of log: %v", r.persister.RaftStateSize())
+			r.Compaction(entry.Index)
+		}
 	}
 }
 
 // this is used to construct and send a vote request to all peers
 func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteResponseChan chan VoteResponse) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.state = candidate
 	r.currentTerm++
 	r.votedFor = r.me
@@ -208,6 +249,8 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 	if lastLogIndex != 0 {
 		lastLogTerm = r.getLastLogTerm()
 	}
+
+	r.persist()
 
 	for p, c := range peerClients {
 		// Send in parallel so we don't wait for each client.
@@ -226,6 +269,9 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 
 // this is used to construct and send an append entry request to all peers
 func (r *Raft) sendApeendEntries(peerClients map[string]pb.RaftClient, appendResponseChan chan AppendResponse) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	for p, c := range peerClients {
 		r.sendApeendEntriesTo(p, c, appendResponseChan)
 	}

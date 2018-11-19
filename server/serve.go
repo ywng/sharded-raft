@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/nyu-distributed-systems-fa18/starter-code-lab2/pb"
+	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
 )
 
 type voteInfo struct {
@@ -92,6 +92,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	//raft.mu.Lock()
 	raft.randSeed = r
 	raft.peers = peers
+	raft.persister = MakePersister()
 	raft.electionTimer = time.NewTimer(randomDuration(r))
 	raft.heartBeatTimer = time.NewTimer(HEARTBEAT_TIMEOUT * time.Millisecond)
 	raft.me = id
@@ -141,9 +142,14 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			if raft.state == leader {
 				log.Printf("Receive client request, command: %s.", op.command.Operation)
 				index := raft.getLastLogIndex() + 1
+
+				raft.mu.Lock()
 				//add the client request to the leader's log first (but it is not yet committed)
 				raft.addLogEntry(&pb.Entry{Term: raft.currentTerm, Index: index, Cmd: &op.command})
 				raft.clientsResponse[index] = op.response
+
+				raft.persist()
+				raft.mu.Unlock()
 
 				//instantly send append entry after receiving client request and added to leader's log
 				log.Printf("Trigger append entries request to peers immediately after receving the client request.")
@@ -173,7 +179,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		case ae := <-raft.AppendChan:
 			log.Printf("Received append entry from %v.", ae.arg.LeaderID)
 
-			//raft.mu.Lock()
+			raft.mu.Lock()
 			res := pb.AppendEntriesRet{
 				Term:    raft.currentTerm,
 				Success: true, //first default it to true
@@ -268,15 +274,17 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				if res.Success {
 					restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
 				}
+
+				raft.persist()
 			}
 
 			ae.response <- res
 
-			//raft.mu.Unlock()
+			raft.mu.Unlock()
 
 		/** handle vote request from other raft peers **/
 		case vreq := <-raft.VoteChan:
-			//raft.mu.Lock()
+			raft.mu.Lock()
 			log.Printf("Received vote request from %v", vreq.arg.CandidateID)
 			resp := pb.RequestVoteRet{
 				Term:        raft.currentTerm,
@@ -322,10 +330,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 					//so servers with the more up-to-datelogs won't be interrupted by outdated servers' elections
 					//less likely of live locks
 					restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+
+					raft.persist()
 				}
 			}
 
-			//raft.mu.Unlock()
+			raft.mu.Unlock()
 
 			vreq.response <- resp
 
@@ -338,12 +348,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				log.Printf("Got response to vote request from %v", vres.peer)
 				log.Printf("Peers %s granted %v. The peer's current term is %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
 
-				//raft.mu.Lock()
+				raft.mu.Lock()
 				//if not candidate state => already reached majority / reverted to follower
 				if raft.state == candidate {
 					//Term confusion: drop any reply that the request was in an older term
 					if vres.requestTerm < raft.currentTerm {
-						//raft.mu.Unlock()
+						raft.mu.Unlock()
 						break
 					}
 
@@ -354,6 +364,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						//fallback to follower
 						raft.currentTerm = vres.ret.Term
 						raft.fallbackToFollower()
+
+						raft.persist()
 					} else if vres.ret.Term == raft.currentTerm && vres.ret.VoteGranted {
 						vote.mu.Lock()
 						if vote.voteRecord[vres.peer] == false {
@@ -370,7 +382,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				}
 
 				//log.Printf("raft.state: %d", raft.state)
-				//raft.mu.Unlock()
+				raft.mu.Unlock()
 			}
 
 		/** handle append entry response from other raft peers **/
@@ -380,11 +392,11 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				// Do not do Fatalf here since the peer might be gone but we should survive.
 				log.Printf("Append entry request RPC call error (%s): %v", ar.peer, ar.err)
 			} else {
-				//raft.mu.Lock()
+				raft.mu.Lock()
 				if raft.state == leader {
 					//Term confusion: drop any reply that the request was in an older term
 					if ar.requestTerm < raft.currentTerm {
-						//raft.mu.Unlock()
+						raft.mu.Unlock()
 						break
 					}
 
@@ -394,7 +406,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 							ar.peer, raft.currentTerm, ar.ret.Term)
 						raft.currentTerm = ar.ret.Term
 						raft.fallbackToFollower()
-						//raft.mu.Unlock()
+
+						raft.persist()
+
+						raft.mu.Unlock()
 						break
 					}
 
@@ -433,7 +448,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				}
 				//log.Printf("raft.state: %d", raft.state)
 
-				//raft.mu.Unlock()
+				raft.mu.Unlock()
 			}
 		}
 	}
