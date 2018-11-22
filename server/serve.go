@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
+	"github.com/raft/pb"
 )
 
 type voteInfo struct {
@@ -81,13 +81,16 @@ func newVoteCounter(peers *arrayPeers) voteInfo {
 
 // The main service loop. All modifications to the KV store are run through here.
 func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
-	raft := Raft{AppendChan: make(chan AppendEntriesInput), VoteChan: make(chan VoteInput)}
+	raft := Raft{AppendChan: make(chan AppendEntriesInput),
+		VoteChan:            make(chan VoteInput),
+		InstallSnapshotChan: make(chan InstallSnapshotInput)}
 	// start in a Go routine so it doesn't affect us.
 	go RunRaftServer(&raft, port)
 	peerClients := getPeerClients(peers)
 
 	appendResponseChan := make(chan AppendResponse)
 	voteResponseChan := make(chan VoteResponse)
+	snapshotResponseChan := make(chan InstallSnapshotResponse)
 
 	//raft.mu.Lock()
 	raft.randSeed = r
@@ -140,8 +143,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		case op := <-s.C:
 			//raft.mu.Lock()
 			if raft.state == leader {
-				log.Printf("Receive client request, command: %s.", op.command.Operation)
 				index := raft.getLastLogIndex() + 1
+				log.Printf("Receive client request, command: %s, assignedIndex: %v.", op.command.Operation, index)
 
 				raft.mu.Lock()
 				//add the client request to the leader's log first (but it is not yet committed)
@@ -153,7 +156,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 
 				//instantly send append entry after receiving client request and added to leader's log
 				log.Printf("Trigger append entries request to peers immediately after receving the client request.")
-				raft.sendApeendEntries(peerClients, appendResponseChan)
+				raft.sendApeendEntries(peerClients, appendResponseChan, snapshotResponseChan)
 
 				//log.Printf("raft.state: %d", raft.state)
 			} else {
@@ -171,7 +174,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 
 			//the sendApeendEntries function will determine if the message
 			//will be heartbeat or carring a log to be replicated
-			raft.sendApeendEntries(peerClients, appendResponseChan)
+			raft.sendApeendEntries(peerClients, appendResponseChan, snapshotResponseChan)
 
 			restartTimer(raft.heartBeatTimer, HEARTBEAT_TIMEOUT*time.Millisecond)
 
@@ -210,16 +213,17 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 					lastLogTerm := raft.getLastLogTerm()
 					//log.Printf("Peer: %s, lastLogIndex: %d, lastLogTerm: %d, commitIndex: %d.", raft.me, lastLogIndex, lastLogTerm, raft.commitIndex)
 
-					var prevLogTerm int64
+					var prevLogTerm int64 = -1
 					if ae.arg.PrevLogIndex == lastLogIndex {
 						prevLogTerm = lastLogTerm
+					} else if ae.arg.PrevLogIndex > lastLogIndex {
 						//if get an AppendEntries with a prevLogIndex beyond th end of the log
 						//same as the term did not match
-					} else if ae.arg.PrevLogIndex > lastLogIndex {
 						res.Success = false
 						prevLogTerm = lastLogTerm
-					} else {
-						entry, _ := raft.getLogEntry(ae.arg.PrevLogIndex)
+					} else if entry, ok := raft.getLogEntry(ae.arg.PrevLogIndex); ok {
+						//if the PrevLogIndex < lastSnapshotLogEntry.Index,
+						//we just not process this append entry request, and assume fail
 						prevLogTerm = entry.Term
 					}
 
@@ -278,9 +282,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				raft.persist()
 			}
 
-			ae.response <- res
-
 			raft.mu.Unlock()
+			ae.response <- res
 
 		/** handle vote request from other raft peers **/
 		case vreq := <-raft.VoteChan:
@@ -336,8 +339,69 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			}
 
 			raft.mu.Unlock()
-
 			vreq.response <- resp
+
+		/** handle install snapshot request from other raft peers **/
+		case installSnapshotReq := <-raft.InstallSnapshotChan:
+			raft.mu.Lock()
+			log.Printf("Received install snapshot request from %v", installSnapshotReq.arg.LeaderID)
+
+			resp := pb.InstallSnapshotRet{
+				Term:    raft.currentTerm,
+				Success: true, //first default it to true
+			}
+
+			//reject appendEntries if our current term is larger
+			//not from current leader, should NOT reset election timer
+			if installSnapshotReq.arg.Term < raft.currentTerm {
+				resp.Success = false
+			} else if installSnapshotReq.arg.LastLogEntry.Index <= raft.getFirstLogIndex() ||
+				installSnapshotReq.arg.LastLogEntry.Index <= raft.lastApplied {
+				//peer itself already did the compaction, ignore the installsnapshot request
+				//or, the snapshot content is already included
+				//we will return success to signal leader to update nextIndex, but no log update is required here.
+				log.Printf("Install snapshot ignored, lastIncludedIndex: %v, firstLogIndex: %v, lastApplied: %v.",
+					installSnapshotReq.arg.LastLogEntry.Index, raft.getFirstLogIndex(), raft.lastApplied)
+			} else {
+				//increase the term if we see a newer one,
+				//and transit to follower if we ever get an installsnapshot call & the term is >= ours
+				if installSnapshotReq.arg.Term > raft.currentTerm || raft.state != follower {
+					log.Printf("InstallSnapshot Request from %v: current term is older (%d vs %d) or it is not follower, fall back to follower.",
+						installSnapshotReq.arg.LeaderID, raft.currentTerm, installSnapshotReq.arg.Term)
+					raft.fallbackToFollower()
+					raft.currentTerm = installSnapshotReq.arg.Term
+					resp.Term = installSnapshotReq.arg.Term
+				}
+
+				//install snapshot
+				log.Printf("Installing snapshot, lastIncludedIndex: %v", installSnapshotReq.arg.LastLogEntry.Index)
+				raft.persister.SaveSnapshot(installSnapshotReq.arg.Data)
+				raft.lastSnapshotLogEntry = installSnapshotReq.arg.LastLogEntry
+
+				entry, ok := raft.getLogEntry(raft.lastSnapshotLogEntry.Index)
+				//if existing log entry has same index and term as snapshot's last included entry,
+				//retain log entries following it
+				if ok && entry.Term == raft.lastSnapshotLogEntry.Term {
+					raft.log = raft.getEntryFrom(entry.Index)
+				} else {
+					raft.deleteAllEntries()
+				}
+
+				s.ApplySnapshot(installSnapshotReq.arg.Data)
+				raft.lastApplied = raft.lastSnapshotLogEntry.Index
+				raft.persist()
+
+				//save the current leader
+				raft.leader = installSnapshotReq.arg.LeaderID
+			}
+
+			//received valid install snapshot RPC from current leader, restart election timer
+			if resp.Success {
+				restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+			}
+
+			raft.mu.Unlock()
+			installSnapshotReq.response <- resp
 
 		/** handle vote response from other raft peers **/
 		case vres := <-voteResponseChan:
@@ -443,13 +507,56 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						//if fail, decrement nextIndex for that peer
 						//and retry append entry
 						raft.nextIndex[ar.peer]--
-						raft.sendApeendEntriesTo(ar.peer, peerClients[ar.peer], appendResponseChan)
+						raft.sendApeendEntriesTo(ar.peer, peerClients[ar.peer], appendResponseChan, snapshotResponseChan)
 					}
 				}
 				//log.Printf("raft.state: %d", raft.state)
 
 				raft.mu.Unlock()
 			}
+
+		/** handle install snapshot response from other raft peers **/
+		case installSnapshotResp := <-snapshotResponseChan:
+			if installSnapshotResp.err != nil {
+				// Do not do Fatalf here since the peer might be gone but we should survive.
+				log.Printf("Install snapshot request RPC call error (%s): %v", installSnapshotResp.peer, installSnapshotResp.err)
+			} else {
+				raft.mu.Lock()
+				if raft.state == leader {
+					//Term confusion: drop any reply that the request was in an older term
+					if installSnapshotResp.requestTerm < raft.currentTerm {
+						raft.mu.Unlock()
+						break
+					}
+
+					//if replied term > leader current term, fall back to follower
+					if installSnapshotResp.ret.Term > raft.currentTerm {
+						log.Printf("Install Snapshot Response from %v: current term is older (%d vs %d), fall back to follower.",
+							installSnapshotResp.peer, raft.currentTerm, installSnapshotResp.ret.Term)
+						raft.currentTerm = installSnapshotResp.ret.Term
+						raft.fallbackToFollower()
+
+						raft.persist()
+
+						raft.mu.Unlock()
+						break
+					}
+
+					if installSnapshotResp.ret.Success {
+						log.Printf("Successfully install snapshot for peer %v", installSnapshotResp.peer)
+
+						raft.nextIndex[installSnapshotResp.peer] = max(raft.nextIndex[installSnapshotResp.peer], raft.lastSnapshotLogEntry.Index+1)
+						raft.matchIndex[installSnapshotResp.peer] = max(raft.matchIndex[installSnapshotResp.peer], raft.lastSnapshotLogEntry.Index)
+
+					} else {
+						log.Printf("Install snapshot failed for peer %v", installSnapshotResp.peer)
+
+					}
+				}
+
+				raft.mu.Unlock()
+			}
+
 		}
 	}
 

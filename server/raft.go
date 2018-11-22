@@ -10,7 +10,7 @@ import (
 
 	context "golang.org/x/net/context"
 
-	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
+	"github.com/raft/pb"
 )
 
 const (
@@ -24,7 +24,7 @@ const (
 	ELECTION_TIMEOUT_LOWER_BOUND = 1000
 	ELECTION_TIMEOUT_UPPER_BOUND = 4000
 	HEARTBEAT_TIMEOUT            = 500
-	LOG_COMPACTION_LIMIT         = 1000 //-1 means no log compaction
+	LOG_COMPACTION_LIMIT         = 30 //-1 means no log compaction
 )
 
 type AppendResponse struct {
@@ -42,6 +42,13 @@ type VoteResponse struct {
 	requestTerm int64
 }
 
+type InstallSnapshotResponse struct {
+	ret         *pb.InstallSnapshotRet
+	err         error
+	peer        string
+	requestTerm int64
+}
+
 // Messages that can be passed from the Raft RPC server to the main loop for AppendEntries
 type AppendEntriesInput struct {
 	arg      *pb.AppendEntriesArgs
@@ -54,10 +61,17 @@ type VoteInput struct {
 	response chan pb.RequestVoteRet
 }
 
+// Messages that can be passed from the Raft RPC server to the main loop for InstallSnapshot
+type InstallSnapshotInput struct {
+	arg      *pb.InstallSnapshotArgs
+	response chan pb.InstallSnapshotRet
+}
+
 // Struct off of which we shall hang the Raft service
 type Raft struct {
-	AppendChan chan AppendEntriesInput
-	VoteChan   chan VoteInput
+	AppendChan          chan AppendEntriesInput
+	VoteChan            chan VoteInput
+	InstallSnapshotChan chan InstallSnapshotInput
 
 	//lock to protect shared access to this raft server state
 	//though in our lab exercise, this shouldn't be a concern
@@ -150,6 +164,15 @@ func (r *Raft) deleteEntryFrom(index int64) {
 	}
 }
 
+func (r *Raft) deleteAllEntries() {
+	r.log = nil
+	r.addLogEntry(r.lastSnapshotLogEntry)
+}
+
+func (r *Raft) getFirstLogIndex() int64 {
+	return r.log[0].Index
+}
+
 func (r *Raft) getLastLogIndex() int64 {
 	return r.log[len(r.log)-1].Index
 }
@@ -188,16 +211,12 @@ func (r *Raft) getEntryFrom(index int64) []*pb.Entry {
 }
 
 func (r *Raft) Compaction(index int64) {
-	go func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-
-		if index > r.lastSnapshotLogEntry.Index {
-			r.lastSnapshotLogEntry, _ = r.getLogEntry(index)
-			r.log = r.getEntryFrom(index)
-			r.persist()
-		}
-	}()
+	log.Printf("Doing compaction, up to index: %d, first entry index: %d.", index, r.getFirstLogIndex())
+	if r.lastSnapshotLogEntry == nil || index > r.lastSnapshotLogEntry.Index && index > r.getFirstLogIndex() {
+		r.lastSnapshotLogEntry, _ = r.getLogEntry(index)
+		r.log = r.getEntryFrom(index)
+		r.persist()
+	}
 }
 
 // this check the raft server's log if any committed but unhandled commands
@@ -218,20 +237,25 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 		op := InputChannelType{command: *entry.Cmd, response: responseChan}
 		s.HandleCommand(op)
 
+		delete(r.clientsResponse, entry.Index)
 		log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Cmd.Operation)
-		log.Printf("Size of log: %v", r.persister.RaftStateSize())
-
-		//check if we reach compaction limit, and do compaction
-		if LOG_COMPACTION_LIMIT != -1 && r.persister.RaftStateSize() >= LOG_COMPACTION_LIMIT {
-			write := new(bytes.Buffer)
-			encoder := gob.NewEncoder(write)
-			encoder.Encode(s.store)
-			data := write.Bytes()
-			r.persister.SaveSnapshot(data)
-			log.Printf("Server starts compaction, size of log: %v", r.persister.RaftStateSize())
-			r.Compaction(entry.Index)
-		}
 	}
+
+	log.Printf("Length of log: %v", len(r.log))
+	//stop the election timeout timer during compaction which might take longer time than the timeout limit
+	//r.electionTimer.Stop()
+	//check if we reach compaction limit, and do compaction
+	if LOG_COMPACTION_LIMIT != -1 && len(r.log) >= LOG_COMPACTION_LIMIT {
+		write := new(bytes.Buffer)
+		encoder := gob.NewEncoder(write)
+		encoder.Encode(s.store)
+		data := write.Bytes()
+		r.persister.SaveSnapshot(data)
+		log.Printf("Server starts compaction, compact up to index: %v, length of log: %v", r.lastApplied, len(r.log))
+		r.Compaction(r.lastApplied)
+	}
+	//resume the election timer after compaction
+	//restartTimer(r.electionTimer, randomDuration(r.randSeed))
 }
 
 // this is used to construct and send a vote request to all peers
@@ -268,17 +292,17 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 }
 
 // this is used to construct and send an append entry request to all peers
-func (r *Raft) sendApeendEntries(peerClients map[string]pb.RaftClient, appendResponseChan chan AppendResponse) {
+func (r *Raft) sendApeendEntries(peerClients map[string]pb.RaftClient, appendResponseChan chan AppendResponse, snapshotResponseChan chan InstallSnapshotResponse) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	for p, c := range peerClients {
-		r.sendApeendEntriesTo(p, c, appendResponseChan)
+		r.sendApeendEntriesTo(p, c, appendResponseChan, snapshotResponseChan)
 	}
 }
 
 // this is used to construct and send an append entry request to given peer (var p)
-func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan chan AppendResponse) {
+func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan chan AppendResponse, snapshotResponseChan chan InstallSnapshotResponse) {
 	var isHeartBeat bool
 	if r.getLastLogIndex() >= r.nextIndex[p] {
 		isHeartBeat = false
@@ -296,7 +320,19 @@ func (r *Raft) sendApeendEntriesTo(p string, c pb.RaftClient, appendResponseChan
 		} else {
 			//cannot get the  prevLogIndex,
 			//it is snapshot... sned install snapshot to peer
+			installSnapshotArgs := &pb.InstallSnapshotArgs{
+				Term:         r.currentTerm,
+				LeaderID:     r.me,
+				LastLogEntry: r.lastSnapshotLogEntry,
+				Data:         r.persister.ReadSnapshot()}
+			log.Printf("Sent InstallSnapshot request to %s, senderCurrentTerm: %d, prevLogIndex: %d, prevLogTerm: %d, commitIndex: %d, lastSnapshotLogIndex: %d, snapshotSize: %d.",
+				p, r.currentTerm, prevLogIndex, prevLogTerm, r.commitIndex, r.lastSnapshotLogEntry.Index, r.persister.SnapshotSize())
+			go func(c pb.RaftClient, p string) {
+				ret, err := c.InstallSnapshot(context.Background(), installSnapshotArgs)
+				snapshotResponseChan <- InstallSnapshotResponse{ret: ret, err: err, peer: p, requestTerm: r.currentTerm}
+			}(c, p)
 
+			return
 		}
 	}
 
@@ -348,6 +384,15 @@ func (r *Raft) AppendEntries(ctx context.Context, arg *pb.AppendEntriesArgs) (*p
 func (r *Raft) RequestVote(ctx context.Context, arg *pb.RequestVoteArgs) (*pb.RequestVoteRet, error) {
 	c := make(chan pb.RequestVoteRet)
 	r.VoteChan <- VoteInput{arg: arg, response: c}
+	result := <-c
+	return &result, nil
+}
+
+// put an install snapshot request to the given raft server's (var r) Install Snapshot Channel
+// this is used/called to make a vote request to given peer
+func (r *Raft) InstallSnapshot(ctx context.Context, arg *pb.InstallSnapshotArgs) (*pb.InstallSnapshotRet, error) {
+	c := make(chan pb.InstallSnapshotRet)
+	r.InstallSnapshotChan <- InstallSnapshotInput{arg: arg, response: c}
 	result := <-c
 	return &result, nil
 }

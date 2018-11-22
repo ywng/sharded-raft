@@ -9,7 +9,7 @@ import (
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
+	"github.com/raft/pb"
 )
 
 func usage() {

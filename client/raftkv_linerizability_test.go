@@ -10,7 +10,7 @@ import (
 	"testing"
 	//"log"
 
-	"github.com/nyu-distributed-systems-fa18/raft-project/porcupine"
+	"github.com/raft/porcupine"
 )
 
 type RaftKvInput struct {

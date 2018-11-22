@@ -1,7 +1,6 @@
 #!/bin/sh
 set -E
 cd pb
-go fmt
 protoc --go_out=plugins=grpc:. kv.proto
 
 cd ../server

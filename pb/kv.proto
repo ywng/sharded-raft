@@ -102,6 +102,20 @@ message AppendEntriesRet {
     bool success = 2;
 }
 
+// Input to InstallSnapshot
+message InstallSnapshotArgs {
+    int64 term = 1;
+    string leaderID = 2;
+    Entry lastLogEntry = 3;
+    bytes data = 4;
+}
+
+// Output from InstallSnapshot
+message InstallSnapshotRet {
+    int64 term = 1;
+    bool success = 2;
+}
+
 // Input to RequestVote
 message RequestVoteArgs {
     int64 term = 1;
@@ -120,4 +134,5 @@ message RequestVoteRet {
 service Raft {
     rpc AppendEntries(AppendEntriesArgs) returns (AppendEntriesRet) {}
     rpc RequestVote(RequestVoteArgs) returns (RequestVoteRet) {}
+    rpc InstallSnapshot(InstallSnapshotArgs) returns (InstallSnapshotRet) {}
 }

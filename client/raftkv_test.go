@@ -33,7 +33,7 @@ import (
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
+	"github.com/raft/pb"
 )
 
 const (
@@ -356,6 +356,37 @@ func TestSurviveLeaderFailure(t *testing.T) {
 }
 
 /*
+	Test if our changes can survive leader failure after log compaction.
+	After a new leader is selected, the kv-store after log compaction should return what we previously set.
+	1. Set keys for current leader and triggered log compaction
+	2. Fail the current leader
+	3. Make a get to new leader, should get back what we set
+*/
+func TestSurviveLogCompactionAndLeaderFailure(t *testing.T) {
+	leaderId, kvc := getKVConnectionToRaftLeader(t)
+	t.Run("serial request to trigger log compaction", TestSerialRequestsCorrectness)
+	t.Run("serial request to trigger log compaction", TestSerialRequestsCorrectness)
+	t.Run("serial request to trigger log compaction", TestSerialRequestsCorrectness)
+	fireSetRequest(t, kvc, "test_leader_failure_log_compaction", "2", nil, true)
+	fireSetRequest(t, kvc, "test_leader_failure2_log_compaction", "21", nil, true)
+	fireCasRequest(t, kvc, "test_leader_failure2_log_compaction", "999", "21", "99", nil, true)
+
+	//fail the leader
+	failGivenRaftServer(t, leaderId)
+	//give time for electing new leader
+	time.Sleep(20 * time.Second)
+
+	_, kvcNextLeader := getKVConnectionToRaftLeader(t)
+	fireGetRequest(t, kvcNextLeader, "test_leader_failure_log_compaction", "2", nil, true)
+	fireGetRequest(t, kvcNextLeader, "test_leader_failure2_log_compaction", "21", nil, true)
+
+	//re-launch the previously killed server for other tests
+	relaunchGivenRaftServer(t, leaderId)
+	//give time for relaunch and let it be stable
+	time.Sleep(20 * time.Second)
+}
+
+/*
 	Test it can tolerate f nodes failure given 2f+1 nodes.
 	1. Set a key
 	2. Fail f nodes
@@ -659,12 +690,15 @@ func TestConcurrentGetSetCas(t *testing.T) {
 	- TestRaftKvHighConcurrentContention
 */
 func TestHighConcurrentContention(t *testing.T) {
+	num_concurr_threads := 10
+	t.Logf("Number of concurrent threads: %v", num_concurr_threads)
+
 	f, err := os.Create("raft_test_data/c-high-concurrent-contention.txt")
 	check(err)
 	defer f.Close()
 	w := &LockedWriter{writer: bufio.NewWriter(f)}
 
-	r := rand.Intn(5)
+	r := rand.Intn(15)
 
 	_, kvc := getKVConnectionToRaftLeader(t)
 
@@ -707,15 +741,16 @@ func TestHighConcurrentContention(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(20) //simulate 5 clients making the same set of requests concurrently
+	wg.Add(num_concurr_threads) //simulate 5 clients making the same set of requests concurrently
 
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= num_concurr_threads; i++ {
 		go func() {
-			time.Sleep(time.Duration(r) * time.Millisecond)
+			time.Sleep((time.Duration(r) + 1) * time.Millisecond)
 			defer wg.Done()
 			//each simulated client fires the same set of requests
 			for _, tt := range tc {
 				tt := tt
+				time.Sleep(time.Duration(r) * time.Millisecond)
 				switch tt.op {
 				case 0:
 					fireGetRequest(t, kvc, tt.key, tt.val, w, false)

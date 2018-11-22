@@ -9,9 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/raft/pb"
 	"google.golang.org/grpc"
-
-	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
 )
 
 func main() {

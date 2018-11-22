@@ -1,5 +1,5 @@
 FROM golang:1.11.0
-WORKDIR /go/src/github.com/nyu-distributed-systems-fa18/raft-project/server
+WORKDIR /go/src/github.com/raft/server
 COPY server .
 COPY pb ../pb
 

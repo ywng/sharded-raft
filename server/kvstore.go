@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"log"
 
 	context "golang.org/x/net/context"
 
-	"github.com/nyu-distributed-systems-fa18/raft-project/pb"
+	"github.com/raft/pb"
 )
 
 // The struct for data to send over channel
@@ -139,4 +141,10 @@ func (s *KVStore) HandleCommand(op InputChannelType) {
 	if unrecognizedOp {
 		log.Fatalf("Unrecognized operation %v", op.command.Operation)
 	}
+}
+
+func (s *KVStore) ApplySnapshot(snapshot []byte) {
+	data := bytes.NewBuffer(snapshot)
+	decoder := gob.NewDecoder(data)
+	decoder.Decode(&s.store)
 }
