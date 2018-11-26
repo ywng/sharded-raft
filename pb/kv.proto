@@ -22,6 +22,11 @@ message KeyValue {
 message Success {
 }
 
+// Represent a void message indicating success
+message Failure {
+    string msg = 1;
+}
+
 // Represents an error.
 message Error {
     string msg = 1;
@@ -48,16 +53,17 @@ message Result {
         Redirect redirect = 1;
         KeyValue kv = 2;
         Success s = 3;
+        Failure failure = 4;
     }
 }
 
 // KvStore service
 service KvStore {
-    // Get the value associated with a key.
     rpc Get (Key) returns (Result) {}
     rpc Set (KeyValue) returns (Result) {}
     rpc Clear(Empty) returns (Result) {}
     rpc CAS(CASArg) returns (Result) {}
+    rpc ChangeConfiguration(Servers) returns (Result) {}
 }
 
 // Internal representations for operations.
@@ -66,6 +72,7 @@ enum Op {
     SET = 1;
     CLEAR = 2;
     CAS = 3;
+    CONFIG_CHG = 4;
 }
 
 // A type for arguments across all operations
@@ -76,7 +83,13 @@ message Command {
         KeyValue set = 3;
         Empty clear = 4;
         CASArg cas = 5;
+        Servers servers = 6;
     }
+}
+
+message Servers {
+    string currList = 1;
+    string newList = 2;
 }
 
 // A log entry

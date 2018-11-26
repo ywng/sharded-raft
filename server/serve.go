@@ -5,20 +5,14 @@ import (
 	"log"
 	rand "math/rand"
 	"net"
+	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc"
 
 	"github.com/raft/pb"
 )
-
-type voteInfo struct {
-	mu         sync.Mutex
-	voteRecord map[string]bool
-	voteCount  int64
-}
 
 // launch a GRPC service for this Raft peer
 func RunRaftServer(r *Raft, port int) {
@@ -40,45 +34,6 @@ func RunRaftServer(r *Raft, port int) {
 	}
 }
 
-func getPeerClients(peers *arrayPeers) map[string]pb.RaftClient {
-	peerClients := make(map[string]pb.RaftClient)
-
-	for _, peer := range *peers {
-		client, err := connectToPeer(peer)
-		if err != nil {
-			log.Fatalf("Failed to connect to GRPC server %v", err)
-		}
-
-		peerClients[peer] = client
-		log.Printf("Connected to %v", peer)
-	}
-	return peerClients
-}
-
-func connectToPeer(peer string) (pb.RaftClient, error) {
-	backoffConfig := grpc.DefaultBackoffConfig
-	// choose an aggressive backoff strategy here.
-	backoffConfig.MaxDelay = 500 * time.Millisecond
-	conn, err := grpc.Dial(peer, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
-	// ensure connection did not fail, which should not happen since this happens in the background
-	if err != nil {
-		return pb.NewRaftClient(nil), err
-	}
-	return pb.NewRaftClient(conn), nil
-}
-
-func newVoteCounter(peers *arrayPeers) voteInfo {
-	vote := voteInfo{}
-	vote.mu.Lock()
-	vote.voteRecord = make(map[string]bool)
-	for _, peer := range *peers {
-		vote.voteRecord[peer] = false
-	}
-	vote.voteCount = 1
-	vote.mu.Unlock()
-	return vote
-}
-
 // The main service loop. All modifications to the KV store are run through here.
 func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	raft := Raft{AppendChan: make(chan AppendEntriesInput),
@@ -86,35 +41,44 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		InstallSnapshotChan: make(chan InstallSnapshotInput)}
 	// start in a Go routine so it doesn't affect us.
 	go RunRaftServer(&raft, port)
-	peerClients := getPeerClients(peers)
+	//peerClients := getPeerClients(peers)
 
 	appendResponseChan := make(chan AppendResponse)
 	voteResponseChan := make(chan VoteResponse)
 	snapshotResponseChan := make(chan InstallSnapshotResponse)
 
-	//raft.mu.Lock()
+	raft.mu.Lock()
 	raft.randSeed = r
 	raft.peers = peers
 	raft.persister = MakePersister()
+	raft.killServer = make(chan int64)
 	raft.electionTimer = time.NewTimer(randomDuration(r))
 	raft.heartBeatTimer = time.NewTimer(HEARTBEAT_TIMEOUT * time.Millisecond)
 	raft.me = id
-	if len(peerClients)%2 == 0 {
-		raft.quorumSize = int64(len(peerClients))/2 + 1
-	} else {
-		raft.quorumSize = int64(len(peerClients))/2 + 2 //e.g. 4 total nodes will need 3 to form a quorum
-	}
 	raft.currentTerm = 0
 	raft.commitIndex = 0
 	raft.lastApplied = 0
 	raft.votedFor = ""
+
+	serverList := peers.Clone()
+	serverList.Set(id) // the configuration should include the current server itself
+	startupConfig := Configuration{servers: serverList}
+	raft.configurations = Configurations{config: startupConfig, lastConfigLogIndex: 0, stable: true}
+	oldConfigCmd := &pb.Command{Operation: pb.Op_CONFIG_CHG,
+		Arg: &pb.Command_Servers{Servers: &pb.Servers{CurrList: startupConfig.servers.String()}}}
+	raft.addLogEntry(&pb.Entry{Term: 0, Index: 0, Cmd: oldConfigCmd})
 	//first dummy term for indexing convenience
-	raft.addLogEntry(&pb.Entry{Term: 0, Index: 0, Cmd: nil})
+	//raft.addLogEntry(&pb.Entry{Term: 0, Index: 0, Cmd: nil})
+
+	log.Printf("Current configuration servers: %v", raft.getServerList())
+	raft.updateConfiguration()
+	raft.updatePeerClients()
+	raft.updateQuorumSize()
 
 	//start as follower with an election timeout
 	raft.fallbackToFollower()
 
-	//raft.mu.Unlock()
+	raft.mu.Unlock()
 
 	// to track voting count
 	var vote voteInfo
@@ -127,18 +91,15 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			log.Printf("Election timeout: %s becomes a candidate requesting vote.", raft.me)
 
 			//initialize vote info every time it becomes candidate
-			vote = newVoteCounter(peers)
+			vote = raft.newVoteCounter()
 
-			//raft.mu.Lock()
 			//send a vote request to all peers
-			raft.sendVoteRequests(peerClients, voteResponseChan)
+			raft.sendVoteRequests(raft.peerClients, voteResponseChan)
 
 			// This will also take care of any pesky timeouts that happened while processing the operation.
 			// this also means within timeout period without receiving majority votes, split votes etc...
 			// it will trigger the election process again
 			restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
-			//raft.mu.Unlock()
-
 		/** client request handling **/
 		case op := <-s.C:
 			//raft.mu.Lock()
@@ -147,16 +108,52 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				log.Printf("Receive client request, command: %s, assignedIndex: %v.", op.command.Operation, index)
 
 				raft.mu.Lock()
-				//add the client request to the leader's log first (but it is not yet committed)
-				raft.addLogEntry(&pb.Entry{Term: raft.currentTerm, Index: index, Cmd: &op.command})
-				raft.clientsResponse[index] = op.response
+
+				if op.command.Operation == pb.Op_CONFIG_CHG {
+
+					log.Printf("Change configuration request. %v", op.command.GetServers())
+
+					if !raft.isEqualToCurrentServerList(op.command.GetServers().CurrList) {
+						//First, verify the provided currList servers is matching
+						log.Printf("The provided current list of servers is not matching the record.")
+						op.response <- pb.Result{Result: &pb.Result_Failure{Failure: &pb.Failure{Msg: "The provided current list of servers is not matching the record"}}}
+
+					} else if !raft.configurations.stable {
+						//should reject client's config changes request if we are currently having one
+						log.Printf("There is already a pending change configurations request.")
+						op.response <- pb.Result{Result: &pb.Result_Failure{Failure: &pb.Failure{Msg: "There is already a pending change configurations request."}}}
+
+					} else {
+						//var servers arrayPeers
+						//servers.SetArray(strings.Split(op.command.GetServers().ServerList, ","))
+						//raft.configurations.new = Configuration{servers: &servers}
+						//raft.configurations.genMergedConfiguration()
+						//cmdOfMergedConfig := &pb.Command{Operation: pb.Op_CONFIG_CHG,
+						//Arg: &pb.Command_Servers{Servers: &pb.Servers{ServerList: raft.configurations.new.servers.String()}}}
+						raft.addLogEntry(&pb.Entry{Term: raft.currentTerm, Index: index, Cmd: &op.command})
+						raft.clientsResponse[index] = op.response
+						//raft.configurations.oldNewLogIndex = index
+						raft.configurations.lastConfigLogIndex = index
+						raft.configurations.stable = false
+
+						raft.updateConfiguration()
+						raft.updatePeerClients()
+						raft.updateQuorumSize()
+						raft.updateLeaderVolatileStatesAfterConfigChange()
+					}
+
+				} else {
+					//add the client request to the leader's log first (but it is not yet committed)
+					raft.addLogEntry(&pb.Entry{Term: raft.currentTerm, Index: index, Cmd: &op.command})
+					raft.clientsResponse[index] = op.response
+				}
 
 				raft.persist()
 				raft.mu.Unlock()
 
 				//instantly send append entry after receiving client request and added to leader's log
 				log.Printf("Trigger append entries request to peers immediately after receving the client request.")
-				raft.sendApeendEntries(peerClients, appendResponseChan, snapshotResponseChan)
+				raft.sendApeendEntries(raft.peerClients, appendResponseChan, snapshotResponseChan)
 
 				//log.Printf("raft.state: %d", raft.state)
 			} else {
@@ -174,15 +171,20 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 
 			//the sendApeendEntries function will determine if the message
 			//will be heartbeat or carring a log to be replicated
-			raft.sendApeendEntries(peerClients, appendResponseChan, snapshotResponseChan)
+			raft.sendApeendEntries(raft.peerClients, appendResponseChan, snapshotResponseChan)
 
 			restartTimer(raft.heartBeatTimer, HEARTBEAT_TIMEOUT*time.Millisecond)
 
 		/** handle append entry request from other raft peers **/
 		case ae := <-raft.AppendChan:
+			raft.mu.Lock()
 			log.Printf("Received append entry from %v.", ae.arg.LeaderID)
 
-			raft.mu.Lock()
+			if !raft.isPeer(ae.arg.LeaderID) { //ignore request from non peer
+				raft.mu.Unlock()
+				break
+			}
+
 			res := pb.AppendEntriesRet{
 				Term:    raft.currentTerm,
 				Success: true, //first default it to true
@@ -259,6 +261,18 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 						//append the new entries
 						for _, entry := range newEntries {
 							raft.addLogEntry(entry)
+							if entry.Cmd.Operation == pb.Op_CONFIG_CHG {
+								if entry.Cmd.GetServers().GetNewList() != "" {
+									raft.configurations.stable = false
+								} else {
+									raft.configurations.stable = true
+								}
+								raft.configurations.lastConfigLogIndex = entry.Index
+								raft.updateConfiguration()
+								raft.updatePeerClients()
+								raft.updateQuorumSize()
+							}
+
 							log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Cmd.Operation)
 						}
 					}
@@ -288,7 +302,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		/** handle vote request from other raft peers **/
 		case vreq := <-raft.VoteChan:
 			raft.mu.Lock()
+			if !raft.isPeer(vreq.arg.CandidateID) { //ignore request from non peer
+				raft.mu.Unlock()
+				break
+			}
 			log.Printf("Received vote request from %v", vreq.arg.CandidateID)
+
 			resp := pb.RequestVoteRet{
 				Term:        raft.currentTerm,
 				VoteGranted: false,
@@ -344,6 +363,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		/** handle install snapshot request from other raft peers **/
 		case installSnapshotReq := <-raft.InstallSnapshotChan:
 			raft.mu.Lock()
+			if !raft.isPeer(installSnapshotReq.arg.LeaderID) { //ignore request from non peer
+				raft.mu.Unlock()
+				break
+			}
 			log.Printf("Received install snapshot request from %v", installSnapshotReq.arg.LeaderID)
 
 			resp := pb.InstallSnapshotRet{
@@ -409,10 +432,14 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				// Do not do Fatalf here since the peer might be gone but we should survive.
 				log.Printf("Vote request RPC call error (%s): %v", vres.peer, vres.err)
 			} else {
+				raft.mu.Lock()
+				if !raft.isPeer(vres.peer) { //ignore request from non peer
+					raft.mu.Unlock()
+					break
+				}
 				log.Printf("Got response to vote request from %v", vres.peer)
 				log.Printf("Peers %s granted %v. The peer's current term is %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
 
-				raft.mu.Lock()
 				//if not candidate state => already reached majority / reverted to follower
 				if raft.state == candidate {
 					//Term confusion: drop any reply that the request was in an older term
@@ -457,6 +484,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				log.Printf("Append entry request RPC call error (%s): %v", ar.peer, ar.err)
 			} else {
 				raft.mu.Lock()
+				if !raft.isPeer(ar.peer) { //ignore request from non peer
+					raft.mu.Unlock()
+					break
+				}
 				if raft.state == leader {
 					//Term confusion: drop any reply that the request was in an older term
 					if ar.requestTerm < raft.currentTerm {
@@ -487,14 +518,22 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 							ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)
 						//the matched index is beyond leader's commitIndex and it is in leader's current term (Figure 8 in the paper)
 						//if majority is reached, it is safe to commit that matchedIndex
-						if entry, _ := raft.getLogEntry(n); n > raft.commitIndex && entry.Term == raft.currentTerm {
-							matchCount := int64(1)
+						if entry, _ := raft.getLogEntry(n); n > raft.commitIndex &&
+							(entry.Term == raft.currentTerm || entry.Cmd.Operation == pb.Op_CONFIG_CHG) {
+
+							matchCount := int64(0)
+							if raft.isPeer(raft.me) { //only if the leader is in current config, count itself
+								matchCount = int64(1)
+							}
+
 							log.Printf("entry: %s.", entry)
-							for _, peer := range *peers {
+							for _, peer := range *raft.getServerList() {
 								if raft.matchIndex[peer] >= n {
 									matchCount++
 								}
 							}
+
+							log.Printf("matchCount: %d, quorumSize: %d.", matchCount, raft.quorumSize)
 							if matchCount >= raft.quorumSize {
 								raft.commitIndex = n
 								//apply to state machine
@@ -502,12 +541,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 							}
 						}
 					} else {
-						log.Printf("Got failed append entries response from %v", ar.peer)
+						log.Printf("Got failed append entries response from peer:%v, peer's term: %d", ar.peer, ar.ret.Term)
 
 						//if fail, decrement nextIndex for that peer
 						//and retry append entry
 						raft.nextIndex[ar.peer]--
-						raft.sendApeendEntriesTo(ar.peer, peerClients[ar.peer], appendResponseChan, snapshotResponseChan)
+						raft.sendApeendEntriesTo(ar.peer, raft.peerClients[ar.peer], appendResponseChan, snapshotResponseChan)
 					}
 				}
 				//log.Printf("raft.state: %d", raft.state)
@@ -522,6 +561,10 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				log.Printf("Install snapshot request RPC call error (%s): %v", installSnapshotResp.peer, installSnapshotResp.err)
 			} else {
 				raft.mu.Lock()
+				if !raft.isPeer(installSnapshotResp.peer) { //ignore request from non peer
+					raft.mu.Unlock()
+					break
+				}
 				if raft.state == leader {
 					//Term confusion: drop any reply that the request was in an older term
 					if installSnapshotResp.requestTerm < raft.currentTerm {
@@ -557,6 +600,12 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				raft.mu.Unlock()
 			}
 
+		/** the server should be shut down **/
+		case <-raft.killServer:
+			log.Printf("Shutting down server: %v", raft.me)
+
+			time.Sleep(2 * time.Second)
+			os.Exit(0)
 		}
 	}
 

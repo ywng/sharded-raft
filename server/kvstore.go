@@ -74,6 +74,19 @@ func (s *KVStore) CAS(ctx context.Context, in *pb.CASArg) (*pb.Result, error) {
 	return &result, nil
 }
 
+func (s *KVStore) ChangeConfiguration(ctx context.Context, in *pb.Servers) (*pb.Result, error) {
+	// Create a channel
+	c := make(chan pb.Result)
+	// Create a request
+	r := pb.Command{Operation: pb.Op_CONFIG_CHG, Arg: &pb.Command_Servers{Servers: in}}
+	// Send request over the channel
+	s.C <- InputChannelType{command: r, response: c}
+	//log.Printf("Waiting for CAS response")
+	result := <-c
+	// The bit below works because Go maps return the 0 value for non existent keys, which is empty in this case.
+	return &result, nil
+}
+
 // Used internally to generate a result for a get request. This function assumes that it is called from a single thread of
 // execution, and hence does not handle races.
 func (s *KVStore) GetInternal(k string) pb.Result {

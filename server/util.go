@@ -19,6 +19,27 @@ func max(x, y int64) int64 {
 	return y
 }
 
+func ServerListEquals(a *arrayPeers, b *arrayPeers) bool {
+	if len(*a) != len(*b) {
+		return false
+	}
+
+	for _, v1 := range *a {
+		var found bool = false
+		for _, v2 := range *b {
+			if v1 == v2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
 // compute a random duration in milliseconds
 func randomDuration(r *rand.Rand) time.Duration {
 	const DurationMax = ELECTION_TIMEOUT_UPPER_BOUND

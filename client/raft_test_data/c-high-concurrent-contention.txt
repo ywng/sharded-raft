@@ -1,452 +1,560 @@
-{:process 50, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 51, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 12, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 14, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 13, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 15, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 52, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 16, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 10, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 11, :type :invoke, :f :set, :key "hello", :value "hi"}
-{:process 14, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 14, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 11, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 13, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 13, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 11, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 15, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 16, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 52, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 15, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 52, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 16, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 10, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 50, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 10, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 50, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 12, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 14, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 51, :type :ok, :f :set, :key "hello", :value "hi"}
-{:process 10, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 16, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 52, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 15, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 50, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 11, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 13, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 12, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 14, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 51, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 52, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 10, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 16, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 13, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 15, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 50, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 11, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 51, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 51, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 13, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 12, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
-{:process 14, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 10, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 52, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 16, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 15, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 50, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 11, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 15, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 12, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
-{:process 11, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 50, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 10, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 13, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 14, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 52, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 16, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 51, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 51, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 52, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 11, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 50, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 10, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 13, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 14, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 16, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 15, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 12, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
-{:process 14, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 52, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 50, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 10, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 13, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 12, :type :invoke, :f :set, :key "abc", :value "def"}
-{:process 16, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 11, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 15, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 51, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 51, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 14, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 52, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 50, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 10, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 10, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 14, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 50, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 52, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 13, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 13, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 51, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 51, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 15, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 12, :type :ok, :f :set, :key "abc", :value "def"}
-{:process 16, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 12, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 15, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 16, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 11, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 11, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 10, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 52, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 14, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 50, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 51, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 13, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 16, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 52, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 13, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 14, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 50, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 16, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 10, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 51, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 15, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 11, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 12, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 15, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 11, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 12, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 52, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 10, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 13, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 51, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 14, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 50, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 16, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 15, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 11, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 12, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 10, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 51, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 14, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 52, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 16, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 50, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 13, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 12, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
-{:process 15, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 11, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 10, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 11, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 51, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 12, :type :ok, :f :set, :key "nyu", :value "New New York University"}
-{:process 14, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 10, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 12, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 11, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 51, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 14, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 52, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 52, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 16, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 50, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 16, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 50, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 13, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 15, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 13, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 15, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 10, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 51, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 12, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
-{:process 10, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 51, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 12, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 11, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 11, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 12, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 50, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 51, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 14, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 16, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 52, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 15, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 13, :type :ok, :f :get, :key "hello", :value "hi"}
-{:process 10, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 13, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 12, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 16, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 15, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 10, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 50, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 51, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 14, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 52, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 13, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 15, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 11, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 12, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 16, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 51, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 10, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 50, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 52, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 14, :type :ok, :f :get, :key "OOP", :value ""}
-{:process 13, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 15, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 51, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 10, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 11, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 50, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 52, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 12, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 14, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 16, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 16, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 14, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 13, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 51, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 15, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 10, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 11, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 50, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 12, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 52, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 52, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 16, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 14, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 13, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 51, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 15, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 10, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 11, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 50, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 12, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 51, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 52, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 16, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 14, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 15, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 13, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 10, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 51, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 16, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 10, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 52, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 14, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 15, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 13, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 10, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 16, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 11, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 12, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 13, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 50, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
-{:process 51, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 10, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 16, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 51, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 11, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 12, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 13, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 50, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 15, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 52, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 14, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 15, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 14, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 52, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 10, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 12, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 16, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 51, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 11, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 12, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 10, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 13, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 50, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
-{:process 16, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 51, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 11, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 13, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 50, :type :invoke, :f :set, :key "abc", :value "defdsds"}
-{:process 10, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 52, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 15, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 14, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 16, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 50, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 12, :type :ok, :f :set, :key "abc", :value "defdsds"}
-{:process 10, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
-{:process 52, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 15, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 14, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 50, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 16, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 12, :type :invoke, :f :set, :key "hello", :value "hihi???"}
-{:process 52, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 14, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 10, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
-{:process 15, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 50, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 16, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 12, :type :ok, :f :set, :key "hello", :value "hihi???"}
-{:process 52, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 14, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 10, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 15, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 12, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 50, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 16, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
-{:process 10, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
-{:process 52, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 14, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 10, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 14, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
-{:process 52, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
-{:process 16, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
-{:process 12, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 15, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 16, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 12, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
-{:process 15, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
-{:process 50, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
-{:process 50, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
-{:process 50, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
-{:process 50, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 52, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
-{:process 10, :type :ok, :f :get, :key "hello", :value "hihi???"}
-{:process 52, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 10, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 14, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
-{:process 12, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
-{:process 15, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
-{:process 50, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
-{:process 16, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
-{:process 14, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 12, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 16, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 15, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 50, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 10, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 52, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
-{:process 52, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 10, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 16, :type :ok, :f :get, :key "hello", :value "hihi???"}
-{:process 14, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 50, :type :ok, :f :get, :key "hello", :value "hihi???"}
-{:process 12, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 15, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 14, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 10, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
-{:process 16, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 12, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 50, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 52, :type :ok, :f :get, :key "hello", :value "hihi???"}
-{:process 15, :type :invoke, :f :get, :key "hello", :value nil}
-{:process 10, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 52, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 14, :type :ok, :f :get, :key "hello", :value "hihi???"}
-{:process 16, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 12, :type :ok, :f :get, :key "hello", :value "hihi???"}
-{:process 50, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 15, :type :ok, :f :get, :key "hello", :value "hihi???"}
-{:process 10, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 52, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 14, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 16, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 50, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 12, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 15, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 10, :type :invoke, :f :set, :key "abcde", :value "defee"}
-{:process 52, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 52, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
-{:process 52, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 16, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
-{:process 14, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 50, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
-{:process 16, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 50, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 14, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 10, :type :ok, :f :set, :key "abcde", :value "defee"}
-{:process 52, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 15, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 12, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
-{:process 52, :type :invoke, :f :set, :key "abcde", :value "defee"}
-{:process 10, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 12, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 15, :type :invoke, :f :get, :key "OOP", :value nil}
-{:process 14, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
-{:process 14, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 16, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 16, :type :invoke, :f :set, :key "abcde", :value "defee"}
-{:process 50, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 50, :type :invoke, :f :set, :key "abcde", :value "defee"}
-{:process 52, :type :ok, :f :set, :key "abcde", :value "defee"}
-{:process 15, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
-{:process 10, :type :ok, :f :get, :key "nyu", :value "New New York University"}
-{:process 12, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
-{:process 15, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 10, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 52, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 12, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
-{:process 14, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 16, :type :ok, :f :set, :key "abcde", :value "defee"}
-{:process 14, :type :invoke, :f :set, :key "abcde", :value "defee"}
-{:process 16, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 50, :type :ok, :f :set, :key "abcde", :value "defee"}
-{:process 12, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 50, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 12, :type :invoke, :f :set, :key "abcde", :value "defee"}
-{:process 15, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
-{:process 15, :type :invoke, :f :set, :key "abcde", :value "defee"}
-{:process 16, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 10, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 52, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 15, :type :ok, :f :set, :key "abcde", :value "defee"}
-{:process 12, :type :ok, :f :set, :key "abcde", :value "defee"}
-{:process 14, :type :ok, :f :set, :key "abcde", :value "defee"}
-{:process 50, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 10, :type :invoke, :f :get, :key "nyuabc", :value nil}
-{:process 16, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 52, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 52, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 10, :type :ok, :f :get, :key "nyuabc", :value ""}
-{:process 16, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 14, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 50, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 12, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 15, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 16, :type :invoke, :f :get, :key "nyuabc", :value nil}
-{:process 52, :type :invoke, :f :get, :key "nyuabc", :value nil}
-{:process 10, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 50, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 12, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 15, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 14, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 50, :type :invoke, :f :get, :key "nyuabc", :value nil}
-{:process 12, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 14, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 15, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 10, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 16, :type :ok, :f :get, :key "nyuabc", :value ""}
-{:process 10, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
-{:process 16, :type :invoke, :f :get, :key "nyu", :value nil}
-{:process 10, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
-{:process 50, :type :ok, :f :get, :key "nyuabc", :value ""}
-{:process 15, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 12, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 14, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
-{:process 52, :type :ok, :f :get, :key "nyuabc", :value ""}
-{:process 16, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
-{:process 15, :type :
+{:process 47, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 45, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 46, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 42, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 38, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 39, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 40, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 41, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 44, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 43, :type :invoke, :f :set, :key "hello", :value "hi"}
+{:process 43, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 43, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 38, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 47, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 45, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 46, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 46, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 38, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 47, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 45, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 39, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 43, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 43, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 39, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 41, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 45, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 38, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 47, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 40, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 46, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 44, :type :ok, :f :set, :key "hello", :value "hi"}
+{:process 45, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 38, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 41, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 47, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 40, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 46, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 44, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 39, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 39, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 43, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 43, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 40, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 38, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 41, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 47, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 45, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 44, :type :ok, :f :set, :key "test_f_nodes_failure", :value "3"}
+{:process 46, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 39, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 43, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 38, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 45, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 41, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 42, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 47, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 40, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 46, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 44, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 43, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 38, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 38, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 39, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 45, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 45, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 42, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 41, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 42, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 47, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 41, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 46, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 40, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 47, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 40, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 46, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 38, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 44, :type :ok, :f :set, :key "test_leader_failure", :value "2"}
+{:process 43, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 39, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 45, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 38, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 43, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 44, :type :invoke, :f :set, :key "abc", :value "def"}
+{:process 42, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 45, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 39, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 41, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 42, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 46, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 47, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 40, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 39, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 38, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 43, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 44, :type :ok, :f :set, :key "abc", :value "def"}
+{:process 45, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 42, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 41, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 46, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 47, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 45, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 40, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 38, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 43, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 44, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 41, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 44, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 41, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 44, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 42, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 46, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 47, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 45, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 46, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 47, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 45, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 43, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 40, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 39, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 38, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 43, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 40, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 38, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 45, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 42, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 46, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 41, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 44, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 45, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 44, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 42, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 46, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 41, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 47, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 47, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 43, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 45, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 42, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 46, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 44, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 40, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 47, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 38, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 39, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 43, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 38, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 45, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 42, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 46, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 44, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 40, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 47, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 41, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 41, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 43, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 39, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 43, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 39, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 44, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 38, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 45, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 42, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 40, :type :ok, :f :set, :key "nyu", :value "New New York University"}
+{:process 47, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 46, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 41, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 38, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 46, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 44, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 45, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 42, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 40, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 47, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 41, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 43, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 39, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 43, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 39, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 40, :type :ok, :f :get, :key "test_f_nodes_failure", :value "3"}
+{:process 41, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 42, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 47, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 38, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 46, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 44, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 45, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 40, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 41, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 45, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 42, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 47, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 38, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 46, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 44, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 39, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 39, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 43, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 44, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 41, :type :ok, :f :get, :key "OOP", :value ""}
+{:process 40, :type :ok, :f :get, :key "hello", :value "hi"}
+{:process 38, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 45, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 42, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 47, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 43, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 44, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 41, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 40, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 38, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 47, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 45, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 42, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 46, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 46, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 39, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 39, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 40, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 42, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 41, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 40, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 41, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 42, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 47, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 44, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 38, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 39, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 45, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 47, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 45, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 44, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 39, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 38, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 46, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 43, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 46, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 43, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 41, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 39, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 40, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 42, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 38, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 44, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 47, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 45, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 39, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 42, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 41, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 40, :type :invoke, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 43, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 46, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 45, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 47, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 38, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 44, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 46, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 43, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 43, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 39, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 42, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 40, :type :ok, :f :set, :key "OOP", :value "Object Oriented Programming"}
+{:process 41, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 42, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 43, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 40, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 39, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 41, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 46, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 45, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 38, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 44, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 47, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 38, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 47, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 46, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 44, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 45, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 43, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 39, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 41, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 40, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 42, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 42, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 43, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 41, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 40, :type :invoke, :f :set, :key "abc", :value "defdsds"}
+{:process 39, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 44, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 45, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 38, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 47, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 46, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 46, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 45, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 44, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 38, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 47, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 40, :type :ok, :f :set, :key "abc", :value "defdsds"}
+{:process 39, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 43, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 41, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 40, :type :invoke, :f :set, :key "hello", :value "hihi???"}
+{:process 39, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 41, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 43, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 42, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 42, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
+{:process 41, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 40, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 46, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 45, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 44, :type :ok, :f :set, :key "hello", :value "hihi???"}
+{:process 38, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 47, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 43, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 39, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 41, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 45, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 40, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 46, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 44, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 38, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 47, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 43, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 42, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
+{:process 42, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 47, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 41, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 45, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
+{:process 40, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 46, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 43, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
+{:process 39, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 38, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 44, :type :ok, :f :set, :key "test_f_nodes_failure", :value "4"}
+{:process 42, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 44, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 47, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 45, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 40, :type :invoke, :f :set, :key "test_leader_failure", :value "8"}
+{:process 46, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 43, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 39, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 38, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 41, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 42, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 38, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 47, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
+{:process 45, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 46, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
+{:process 40, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 43, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 41, :type :ok, :f :get, :key "test_f_nodes_failure", :value "4"}
+{:process 42, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 39, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 44, :type :ok, :f :set, :key "test_leader_failure", :value "8"}
+{:process 44, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 38, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 45, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 40, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 43, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 39, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 42, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 47, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 46, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 41, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 40, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 44, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 44, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 40, :type :invoke, :f :get, :key "hello", :value nil}
+{:process 38, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 41, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 43, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 42, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 47, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 39, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 46, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 38, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 43, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 39, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 41, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 47, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 42, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 46, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 45, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 45, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 40, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 38, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 44, :type :ok, :f :get, :key "hello", :value "hihi???"}
+{:process 44, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 38, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 40, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 46, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 39, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 43, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 41, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 38, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 45, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 42, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 40, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 44, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 47, :type :ok, :f :set, :key "test_f_nodes_failure", :value "9d0"}
+{:process 46, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 39, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 41, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 43, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 45, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 44, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 38, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 42, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 40, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 47, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 46, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 39, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 46, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 45, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 47, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 41, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 43, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 44, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 44, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 45, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 41, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 43, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 47, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 39, :type :ok, :f :get, :key "nyu", :value "New New York University"}
+{:process 38, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 44, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 42, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 40, :type :ok, :f :get, :key "OOP", :value "Object Oriented Programming"}
+{:process 38, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 39, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 46, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 40, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 44, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 42, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 47, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 45, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 41, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 43, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 46, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 41, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 47, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 45, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 43, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 41, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 38, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 44, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 42, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 40, :type :ok, :f :get, :key "test_f_nodes_failure", :value "9d0"}
+{:process 39, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 41, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 38, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 39, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 42, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 40, :type :invoke, :f :set, :key "abcde", :value "defee"}
+{:process 44, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 47, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 47, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 46, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 43, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 43, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 46, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 38, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 45, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 39, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 44, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 41, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 38, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 41, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 45, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 39, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 44, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 38, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 40, :type :ok, :f :set, :key "abcde", :value "defee"}
+{:process 46, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 47, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 42, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 43, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 38, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 42, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 40, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 43, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 46, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 47, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 39, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 45, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 44, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 41, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 45, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 41, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 39, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 44, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 47, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 46, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 42, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 38, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 40, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 43, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 47, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 43, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 42, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 38, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 40, :type :invoke, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 46, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 39, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 45, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 44, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 41, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 41, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 45, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 44, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 47, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 47, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 44, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 43, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 46, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 38, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 42, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 40, :type :ok, :f :set, :key "nyu", :value "New New York University? seriously"}
+{:process 44, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 40, :type :invoke, :f :get, :key "nyuabc", :value nil}
+{:process 43, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 46, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 38, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 42, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 45, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 41, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 41, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 45, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 38, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 42, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 47, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 40, :type :ok, :f :get, :key "nyuabc", :value ""}
+{:process 43, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 46, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 44, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 46, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 47, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 40, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 41, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 45, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 40, :type :ok, :f :get, :key "nyu", :value "New New York University? seriously"}
+{:process 47, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 46, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 40, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "91"}
+{:process 40, :type :ok, :f :set, :key "test_f_nodes_failure", :value "91"}

@@ -5,10 +5,12 @@ import (
 	"encoding/gob"
 	"log"
 	rand "math/rand"
+	"strings"
 	"sync"
 	"time"
 
 	context "golang.org/x/net/context"
+	"google.golang.org/grpc"
 
 	"github.com/raft/pb"
 )
@@ -24,8 +26,14 @@ const (
 	ELECTION_TIMEOUT_LOWER_BOUND = 1000
 	ELECTION_TIMEOUT_UPPER_BOUND = 4000
 	HEARTBEAT_TIMEOUT            = 500
-	LOG_COMPACTION_LIMIT         = 30 //-1 means no log compaction
+	LOG_COMPACTION_LIMIT         = 300 //-1 means no log compaction
 )
+
+type voteInfo struct {
+	mu         sync.Mutex
+	voteRecord map[string]bool
+	voteCount  int64
+}
 
 type AppendResponse struct {
 	ret         *pb.AppendEntriesRet
@@ -111,8 +119,49 @@ type Raft struct {
 	//for snapshot
 	lastSnapshotLogEntry *pb.Entry
 
-	//TO DO: for memershutdown
-	//killServer chan int64
+	//for membership/configurations changes
+	configurations Configurations
+	peerClients    map[string]pb.RaftClient
+	killServer     chan int64
+}
+
+//to get the server list from the current active configuration
+func (r *Raft) getServerList() *arrayPeers {
+	return r.configurations.config.servers
+}
+
+func (r *Raft) isEqualToCurrentServerList(list string) bool {
+	var other arrayPeers
+	other.SetArray(strings.Split(list, ","))
+
+	return ServerListEquals(r.getServerList(), &other)
+}
+
+func (r *Raft) updateConfiguration() {
+	var currServers arrayPeers
+
+	entry, ok := r.getLogEntry(r.configurations.lastConfigLogIndex)
+	if !ok {
+		log.Fatalf("Something wrong with updating configurations, config log entry not found")
+	}
+
+	currServers.SetArray(strings.Split(entry.Cmd.GetServers().CurrList, ","))
+	if entry.Cmd.GetServers().GetNewList() != "" {
+		var newServers arrayPeers
+		newServers.SetArray(strings.Split(entry.Cmd.GetServers().NewList, ","))
+		currServers = *currServers.Merge(&newServers)
+	}
+
+	r.configurations.config = Configuration{servers: &currServers}
+}
+
+//to check given sever is our peer given the current configuration
+func (r *Raft) isPeer(server string) bool {
+	return r.getServerList().Contains(server)
+}
+
+func (r *Raft) Kill() {
+	r.killServer <- 1
 }
 
 //to save persistent raft states
@@ -136,15 +185,94 @@ func (r *Raft) leaderStatePrep() {
 	//initialise leader's volatile state
 	r.nextIndex = make(map[string]int64)
 	r.matchIndex = make(map[string]int64)
-	r.clientsResponse = make(map[int64]chan pb.Result)
+	if r.clientsResponse == nil {
+		r.clientsResponse = make(map[int64]chan pb.Result)
+		log.Printf("Leader state prep, creating a new client response chan map.")
+	} else {
+		for index := range r.clientsResponse {
+			if index <= r.lastApplied {
+				delete(r.clientsResponse, index)
+			}
+		}
+	}
 
 	index := r.getLastLogIndex() + 1
-	for _, peer := range *r.peers {
+	for _, peer := range *r.getServerList() {
+		if peer == r.me {
+			continue
+		}
 		r.nextIndex[peer] = index
 		//match index is a conservative measurement of what prefix of the log the leader shares with given followers
 		//which we won't know beforehead, initialised to 0, essentially mean none of entries
 		r.matchIndex[peer] = 0
 	}
+}
+
+func (r *Raft) updateLeaderVolatileStatesAfterConfigChange() {
+	index := r.getLastLogIndex() + 1
+	for _, peer := range *r.getServerList() {
+		if peer == r.me {
+			continue
+		}
+		if _, ok := r.nextIndex[peer]; !ok {
+			r.nextIndex[peer] = index
+		}
+
+		//match index is a conservative measurement of what prefix of the log the leader shares with given followers
+		//which we won't know beforehead, initialised to 0, essentially mean none of entries
+		if _, ok := r.matchIndex[peer]; !ok {
+			r.matchIndex[peer] = 0
+		}
+	}
+}
+
+func (r *Raft) updateQuorumSize() {
+	r.quorumSize = int64(len(*r.configurations.config.servers))/2 + 1
+}
+
+func (r *Raft) updatePeerClients() {
+	r.peerClients = make(map[string]pb.RaftClient)
+	for _, peer := range *r.getServerList() {
+		if peer == r.me { //except itself
+			continue
+		}
+		client, err := r.connectToPeer(peer)
+		if err != nil {
+			log.Fatalf("Failed to connect to GRPC server %v", err)
+		}
+
+		r.peerClients[peer] = client
+		log.Printf("Connected to %v", peer)
+	}
+}
+
+func (r *Raft) connectToPeer(peer string) (pb.RaftClient, error) {
+	backoffConfig := grpc.DefaultBackoffConfig
+	// choose an aggressive backoff strategy here.
+	backoffConfig.MaxDelay = 500 * time.Millisecond
+	conn, err := grpc.Dial(peer, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
+	// ensure connection did not fail, which should not happen since this happens in the background
+	if err != nil {
+		return pb.NewRaftClient(nil), err
+	}
+	return pb.NewRaftClient(conn), nil
+}
+
+func (r *Raft) newVoteCounter() voteInfo {
+	vote := voteInfo{}
+	vote.mu.Lock()
+	vote.voteRecord = make(map[string]bool)
+	for _, peer := range *r.getServerList() {
+		if peer == r.me { //except itself
+			continue
+		}
+		vote.voteRecord[peer] = false
+	}
+	if r.isPeer(r.me) { //only if the leader is in current config, vote for itself
+		vote.voteCount = 1
+	}
+	vote.mu.Unlock()
+	return vote
 }
 
 func (r *Raft) fallbackToFollower() {
@@ -234,8 +362,57 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 		} else {
 			responseChan = nil
 		}
-		op := InputChannelType{command: *entry.Cmd, response: responseChan}
-		s.HandleCommand(op)
+
+		if entry.Cmd.Operation == pb.Op_CONFIG_CHG {
+			if r.state == leader {
+				//we got a configuration committed, determine next step
+				index := r.getLastLogIndex() + 1
+				if entry.Cmd.GetServers().GetNewList() != "" {
+					cmdOfNewConfig := &pb.Command{Operation: pb.Op_CONFIG_CHG,
+						Arg: &pb.Command_Servers{Servers: &pb.Servers{CurrList: entry.Cmd.GetServers().NewList}}}
+					r.addLogEntry(&pb.Entry{Term: r.currentTerm, Index: index, Cmd: cmdOfNewConfig})
+
+					r.clientsResponse[index] = r.clientsResponse[entry.Index]
+
+					r.configurations.stable = false
+					r.configurations.lastConfigLogIndex = index
+
+					r.updateConfiguration()
+					r.updatePeerClients()
+					r.updateQuorumSize()
+					r.updateLeaderVolatileStatesAfterConfigChange()
+				} else {
+					//new configuration is committed, we make the new configuration as the latest configuration
+					r.configurations.stable = true
+
+					//use select to do non-blocking send
+					select {
+					case responseChan <- pb.Result{Result: &pb.Result_S{S: &pb.Success{}}}:
+						log.Printf("Config changes applied and replied to client.")
+					default:
+						//no response is sent when non-leader is handling the command
+						log.Printf("Config changes applied but we lost the channel to send response back to the client due to leadership changes in between.")
+					}
+
+					//leader step down if it is not in the config
+					if !r.isPeer(r.me) {
+						r.fallbackToFollower()
+					}
+				}
+			}
+
+			log.Printf("Current server configuration: %v", r.getServerList())
+
+			if !r.isPeer(r.me) {
+				log.Printf("Applied committed configuration changes and the current server is not part of the configuration, server: %v",
+					r.me)
+				//go r.Kill()
+			}
+
+		} else {
+			op := InputChannelType{command: *entry.Cmd, response: responseChan}
+			s.HandleCommand(op)
+		}
 
 		delete(r.clientsResponse, entry.Index)
 		log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Cmd.Operation)
@@ -245,7 +422,8 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 	//stop the election timeout timer during compaction which might take longer time than the timeout limit
 	//r.electionTimer.Stop()
 	//check if we reach compaction limit, and do compaction
-	if LOG_COMPACTION_LIMIT != -1 && len(r.log) >= LOG_COMPACTION_LIMIT {
+	//!!we don't do log compaction if we are undergoing membership changes!!
+	if LOG_COMPACTION_LIMIT != -1 && len(r.log) >= LOG_COMPACTION_LIMIT && r.configurations.stable {
 		write := new(bytes.Buffer)
 		encoder := gob.NewEncoder(write)
 		encoder.Encode(s.store)

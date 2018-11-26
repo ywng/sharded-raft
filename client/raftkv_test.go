@@ -228,6 +228,13 @@ func fireClearRequest(t *testing.T, kvc pb.KvStoreClient) {
 	}
 }
 
+func fireChangeConfigurationRequest(t *testing.T, kvc pb.KvStoreClient, currList string, newList string) {
+	_, err := kvc.ChangeConfiguration(context.Background(), &pb.Servers{CurrList: currList, NewList: newList})
+	if err != nil {
+		t.Fatalf("Could not change configuration")
+	}
+}
+
 func goId(t *testing.T) int {
 	defer func() {
 		if err := recover(); err != nil {
@@ -291,6 +298,17 @@ func TestClear(t *testing.T) {
 	fireGetRequest(t, kvc, "x", "", nil, true)
 	fireGetRequest(t, kvc, "y", "", nil, true)
 	fireGetRequest(t, kvc, "z", "", nil, true)
+}
+
+/*
+	Test if we can change configuration successfully without loss of data
+*/
+func TestChangeConfiguration(t *testing.T) {
+	_, kvc := getKVConnectionToRaftLeader(t)
+	//fireChangeConfigurationRequest(t, kvc, "peer1:3001,peer2:3001,peer3:3001,peer4:3001,peer0:3001", "peer0:3001,peer2:3001,peer1:3001")
+	//fireChangeConfigurationRequest(t, kvc, "peer0:3001,peer2:3001,peer1:3001", "peer1:3001,peer2:3001,peer3:3001,peer4:3001,peer0:3001")
+	fireChangeConfigurationRequest(t, kvc, "peer1:3001,peer2:3001,peer3:3001,peer4:3001,peer0:3001", "peer1:3001,peer2:3001,peer3:3001,peer4:3001,peer0:3001,peer5:3001")
+	
 }
 
 /*
