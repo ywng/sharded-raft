@@ -54,6 +54,7 @@ message Result {
         KeyValue kv = 2;
         Success s = 3;
         Failure failure = 4;
+        ShardConfig config = 5;
     }
 }
 
@@ -62,8 +63,11 @@ service KvStore {
     rpc Get (Key) returns (Result) {}
     rpc Set (KeyValue) returns (Result) {}
     rpc Clear(Empty) returns (Result) {}
-    rpc CAS(CASArg) returns (Result) {}
+    rpc CAS(CASArg) returns (Result) {} 
+    rpc ShardMigration(ShardMigrationArgs) returns (ShardMigrationReply) {}
+    //this is raft membership config, not shard config
     rpc ChangeConfiguration(Servers) returns (Result) {}
+
 }
 
 // Internal representations for operations.
@@ -72,7 +76,12 @@ enum Op {
     SET = 1;
     CLEAR = 2;
     CAS = 3;
-    CONFIG_CHG = 4;
+    JOIN = 4;
+    LEAVE = 5;
+    MOVE = 6;
+    QUERY = 7;
+    SHARD_CONFIG = 8;
+    CONFIG_CHG = 9;
 }
 
 // A type for arguments across all operations
@@ -83,7 +92,12 @@ message Command {
         KeyValue set = 3;
         Empty clear = 4;
         CASArg cas = 5;
-        Servers servers = 6;
+        JoinArgs joinArgs = 6;
+        LeaveArgs leaveArgs = 7;
+        MoveArgs moveArgs = 8;
+        QueryArgs queryArgs = 9;
+        ShardConfig shardConfig = 10;
+        Servers servers = 11;
     }
 }
 
@@ -148,4 +162,65 @@ service Raft {
     rpc AppendEntries(AppendEntriesArgs) returns (AppendEntriesRet) {}
     rpc RequestVote(RequestVoteArgs) returns (RequestVoteRet) {}
     rpc InstallSnapshot(InstallSnapshotArgs) returns (InstallSnapshotRet) {}
+}
+
+//============================= for shard master =================================//
+message ServerList {
+    repeated string list = 1;
+}
+
+message GroupIDs {
+    repeated int64 ids = 1;
+}
+
+message ShardsMapping {
+    repeated int64 gids = 1;
+}
+
+message GroupServersMap {
+    map<int64, ServerList> map = 1;
+}
+
+message ShardConfig {
+    int64 num = 1;
+    ShardsMapping shardsGroupMap = 2;
+    GroupServersMap servers = 3;
+    int64 maxConfigNum = 4;
+}
+
+message JoinArgs {
+    GroupServersMap servers = 1; 
+}
+
+message LeaveArgs {
+    GroupIDs gids = 1;
+}
+
+message MoveArgs {
+    int64 shard = 1;
+    int64 gid = 2;
+}
+
+message QueryArgs {
+    int64 num = 1; // desired config number
+}
+
+message ShardMigrationArgs {
+    int64   shard = 1;
+    int64   configNum = 2;
+}
+
+message ShardMigrationReply {
+    map<string, string> migStore = 1;
+    bool success = 2;
+}
+
+// Shard master service
+service ShardMaster {
+    rpc Join(JoinArgs) returns (Result) {}
+    rpc Leave(LeaveArgs) returns (Result) {}
+    rpc Move(MoveArgs) returns (Result) {}
+    rpc Query(QueryArgs) returns (Result) {}
+    //this is raft membership config, not shard config
+    rpc ChangeConfiguration(Servers) returns (Result) {}
 }

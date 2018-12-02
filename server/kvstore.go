@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/gob"
 	"log"
+	"sync"
 
 	context "golang.org/x/net/context"
 
-	"github.com/raft/pb"
+	"github.com/sharded-raft/pb"
 )
 
 // The struct for data to send over channel
@@ -20,6 +21,30 @@ type InputChannelType struct {
 type KVStore struct {
 	C     chan InputChannelType
 	store map[string]string
+
+	mu             sync.Mutex
+	gid            int64
+	config         *pb.ShardConfig
+	migrateReceive map[int]bool
+}
+
+func (s *KVStore) ShardMigration(ctx context.Context, args *pb.ShardMigrationArgs) (*pb.ShardMigrationReply, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	reply := &pb.ShardMigrationReply{Success: true}
+	if args.ConfigNum > s.config.Num {
+		reply.Success = false
+	} else {
+		reply.MigStore = make(map[string]string)
+		for k, v := range s.store {
+			if key2shard(k) == args.Shard {
+				reply.MigStore[k] = v
+			}
+		}
+	}
+
+	return reply, nil
 }
 
 func (s *KVStore) Get(ctx context.Context, key *pb.Key) (*pb.Result, error) {
@@ -118,7 +143,7 @@ func (s *KVStore) CasInternal(k string, v string, vn string) pb.Result {
 	}
 }
 
-func (s *KVStore) HandleCommand(op InputChannelType) {
+func (s *KVStore) HandleCommand(op InputChannelType, raft *Raft) {
 	log.Printf("kv-store is handling committed command: %s", op.command.Operation)
 
 	var result pb.Result
@@ -136,6 +161,67 @@ func (s *KVStore) HandleCommand(op InputChannelType) {
 	case pb.Op_CAS:
 		arg := c.GetCas()
 		result = s.CasInternal(arg.Kv.Key, arg.Kv.Value, arg.Value.Value)
+	case pb.Op_SHARD_CONFIG:
+		//sharding logic
+		newConfig := c.GetShardConfig()
+		s.mu.Lock()
+		if newConfig.Num == s.config.Num {
+			s.mu.Unlock()
+			break
+		}
+		log.Printf("kv-store group receives new sharding config, config: %v", newConfig)
+		if newConfig.Num == 1 {
+			s.config = newConfig
+			if newConfig.Num < newConfig.MaxConfigNum {
+				raft.migrating = true
+			}
+			s.mu.Unlock()
+			break
+		}
+		s.migrateReceive = make(map[int]bool)
+		for shard, gid := range s.config.ShardsGroupMap.Gids {
+			newGid := newConfig.ShardsGroupMap.Gids[shard]
+			//the shard was not in our storage and will need to be in our storage
+			if gid != s.gid && newGid == s.gid {
+				s.migrateReceive[shard] = false
+			}
+		}
+		raft.migrating = true
+		s.mu.Unlock()
+		migrateOk := false
+		for !migrateOk {
+			migrateOk = true
+			for shard, ok := range s.migrateReceive {
+				if !ok {
+					migrateOk = false
+					args := &pb.ShardMigrationArgs{Shard: int64(shard), ConfigNum: newConfig.Num}
+					gidOfShard := s.config.ShardsGroupMap.Gids[shard]
+					for _, server := range s.config.Servers.Map[gidOfShard].List {
+						kvc := establishConnectionKvStore(server)
+						res, err := kvc.ShardMigration(context.Background(), args)
+						if err == nil && res.Success {
+							s.mu.Lock()
+							if s.migrateReceive[shard] == false {
+								for k, v := range res.MigStore {
+									s.store[k] = v
+								}
+
+								s.migrateReceive[shard] = true
+							}
+							s.mu.Unlock()
+							break
+						}
+					}
+				}
+			}
+		}
+		s.mu.Lock()
+		if newConfig.Num == newConfig.MaxConfigNum {
+			raft.migrating = false
+		}
+		s.config = newConfig
+		s.mu.Unlock()
+
 	default:
 		// Sending a blank response to just free things up, but we don't know how to make progress here.
 		result = pb.Result{}

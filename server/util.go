@@ -3,7 +3,26 @@ package main
 import (
 	rand "math/rand"
 	"time"
+	//"github.com/sharded-raft/shardmaster"
 )
+
+//
+// which shard is a key in?
+// please use this function,
+// and please do not change it.
+//
+const (
+	NShards = 10
+)
+
+func key2shard(key string) int64 {
+	shard := int64(0)
+	if len(key) > 0 {
+		shard = int64(key[0])
+	}
+	shard %= NShards
+	return shard
+}
 
 func min(x, y int64) int64 {
 	if x < y {

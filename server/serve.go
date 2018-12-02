@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"github.com/raft/pb"
+	"github.com/sharded-raft/pb"
 )
 
 // launch a GRPC service for this Raft peer
@@ -34,8 +35,104 @@ func RunRaftServer(r *Raft, port int) {
 	}
 }
 
+func getKvStoreRaftLeaderConnection(servers *pb.ServerList) pb.KvStoreClient {
+	leaderEndpoint := getCurrentKvStoreLeaderByGetRequest(servers)
+	kvc := establishConnectionKvStore(leaderEndpoint)
+	return kvc
+}
+
+func getCurrentKvStoreLeaderByGetRequest(servers *pb.ServerList) string {
+	for _, endpoint := range servers.List {
+		kvc := establishConnectionKvStore(endpoint)
+
+		// Request value for hello
+		req := &pb.Key{Key: "hello"}
+		res, err := kvc.Get(context.Background(), req)
+		if err != nil {
+			continue
+		}
+
+		switch res.Result.(type) {
+		case *pb.Result_Redirect:
+			log.Printf("The given server is not Raft leader, redirect to leader \"%v\" ...", res.GetRedirect().Server)
+		default:
+			{
+				log.Printf("Got response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
+				return endpoint
+			}
+		}
+	}
+
+	log.Fatalf("No sever is availabile for the given kvstore group.")
+	return ""
+}
+
+func establishConnectionKvStore(endpoint string) pb.KvStoreClient {
+	log.Printf("Connecting to kv-store group, endpoint: %v", endpoint)
+	// Connect to the server. We use WithInsecure since we do not configure https in this class.
+	conn, err := grpc.Dial(endpoint, grpc.WithInsecure())
+	//Ensure connection did not fail.
+	if err != nil {
+		log.Printf("Failed to dial GRPC server %v", err)
+	}
+	log.Printf("Connected")
+
+	// Create a KvStore client
+	kvc := pb.NewKvStoreClient(conn)
+
+	return kvc
+}
+
+func getShardMasterRaftLeaderConnection(servers *pb.ServerList) pb.ShardMasterClient {
+	leaderEndpoint := getCurrentShardMasterLeaderByGetRequest(servers)
+	shardC := establishConnectionShardMaster(leaderEndpoint)
+	return shardC
+}
+
+func getCurrentShardMasterLeaderByGetRequest(servers *pb.ServerList) string {
+	for _, endpoint := range servers.List {
+		shardC := establishConnectionShardMaster(endpoint)
+
+		// Request value for query
+		req := &pb.QueryArgs{Num: -1}
+		res, err := shardC.Query(context.Background(), req)
+		if err != nil {
+			continue
+		}
+
+		switch res.Result.(type) {
+		case *pb.Result_Redirect:
+			log.Printf("The given server is not Raft leader, redirect to leader \"%v\" ...", res.GetRedirect().Server)
+		default:
+			{
+				log.Printf("Got response: %v", res.GetConfig())
+				return endpoint
+			}
+		}
+	}
+
+	log.Fatalf("No sever is availabile for the given shard master.")
+	return ""
+}
+
+func establishConnectionShardMaster(endpoint string) pb.ShardMasterClient {
+	log.Printf("Connecting to Shard Master, endpoint: %v", endpoint)
+	// Connect to the server. We use WithInsecure since we do not configure https in this class.
+	conn, err := grpc.Dial(endpoint, grpc.WithInsecure())
+	//Ensure connection did not fail.
+	if err != nil {
+		log.Printf("Failed to dial GRPC server %v", err)
+	}
+	log.Printf("Connected")
+
+	// Create a KvStore client
+	shardC := pb.NewShardMasterClient(conn)
+
+	return shardC
+}
+
 // The main service loop. All modifications to the KV store are run through here.
-func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
+func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, shardMasterServers *arrayPeers) {
 	raft := Raft{AppendChan: make(chan AppendEntriesInput),
 		VoteChan:            make(chan VoteInput),
 		InstallSnapshotChan: make(chan InstallSnapshotInput)}
@@ -54,11 +151,15 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	raft.killServer = make(chan int64)
 	raft.electionTimer = time.NewTimer(randomDuration(r))
 	raft.heartBeatTimer = time.NewTimer(HEARTBEAT_TIMEOUT * time.Millisecond)
+	raft.shardQueryTimer = time.NewTimer(SHARD_QUERY_TIMEOUT * time.Millisecond)
 	raft.me = id
 	raft.currentTerm = 0
 	raft.commitIndex = 0
 	raft.lastApplied = 0
 	raft.votedFor = ""
+
+	//sharding
+	raft.shardMasterC = getShardMasterRaftLeaderConnection(&pb.ServerList{List: *shardMasterServers})
 
 	serverList := peers.Clone()
 	serverList.Set(id) // the configuration should include the current server itself
@@ -103,7 +204,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		/** client request handling **/
 		case op := <-s.C:
 			//raft.mu.Lock()
-			if raft.state == leader {
+			//==> we don't take request during shard migration
+			if raft.state == leader && !raft.migrating {
 				index := raft.getLastLogIndex() + 1
 				log.Printf("Receive client request, command: %s, assignedIndex: %v.", op.command.Operation, index)
 
@@ -600,6 +702,25 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				raft.mu.Unlock()
 			}
 
+		/** periodically query the shard config from Shard Master **/
+		case <-raft.shardQueryTimer.C:
+			newConfigRes, _ := raft.shardMasterC.Query(context.Background(), &pb.QueryArgs{Num: s.config.Num + 1})
+			maxConfigRes, _ := raft.shardMasterC.Query(context.Background(), &pb.QueryArgs{Num: -1})
+			newConfig := newConfigRes.GetConfig()
+			maxConfig := maxConfigRes.GetConfig()
+
+			newConfig.MaxConfigNum = maxConfig.Num
+			s.mu.Lock()
+			if newConfig.Num > s.config.Num {
+				s.mu.Unlock()
+				shardConfigCmd := &pb.Command{Operation: pb.Op_SHARD_CONFIG, Arg: &pb.Command_ShardConfig{ShardConfig: newConfig}}
+				index := raft.getLastLogIndex() + 1
+				raft.addLogEntry(&pb.Entry{Term: raft.currentTerm, Index: index, Cmd: shardConfigCmd})
+			} else {
+				s.mu.Unlock()
+			}
+			restartTimer(raft.shardQueryTimer, SHARD_QUERY_TIMEOUT*time.Millisecond)
+
 		/** the server should be shut down **/
 		case <-raft.killServer:
 			log.Printf("Shutting down server: %v", raft.me)
@@ -607,6 +728,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			time.Sleep(2 * time.Second)
 			os.Exit(0)
 		}
+
 	}
 
 	log.Printf("Strange to arrive here")

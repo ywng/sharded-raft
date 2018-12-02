@@ -26,11 +26,16 @@ const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 type Op int32
 
 const (
-	Op_GET        Op = 0
-	Op_SET        Op = 1
-	Op_CLEAR      Op = 2
-	Op_CAS        Op = 3
-	Op_CONFIG_CHG Op = 4
+	Op_GET          Op = 0
+	Op_SET          Op = 1
+	Op_CLEAR        Op = 2
+	Op_CAS          Op = 3
+	Op_JOIN         Op = 4
+	Op_LEAVE        Op = 5
+	Op_MOVE         Op = 6
+	Op_QUERY        Op = 7
+	Op_SHARD_CONFIG Op = 8
+	Op_CONFIG_CHG   Op = 9
 )
 
 var Op_name = map[int32]string{
@@ -38,15 +43,25 @@ var Op_name = map[int32]string{
 	1: "SET",
 	2: "CLEAR",
 	3: "CAS",
-	4: "CONFIG_CHG",
+	4: "JOIN",
+	5: "LEAVE",
+	6: "MOVE",
+	7: "QUERY",
+	8: "SHARD_CONFIG",
+	9: "CONFIG_CHG",
 }
 
 var Op_value = map[string]int32{
-	"GET":        0,
-	"SET":        1,
-	"CLEAR":      2,
-	"CAS":        3,
-	"CONFIG_CHG": 4,
+	"GET":          0,
+	"SET":          1,
+	"CLEAR":        2,
+	"CAS":          3,
+	"JOIN":         4,
+	"LEAVE":        5,
+	"MOVE":         6,
+	"QUERY":        7,
+	"SHARD_CONFIG": 8,
+	"CONFIG_CHG":   9,
 }
 
 func (x Op) String() string {
@@ -425,6 +440,7 @@ type Result struct {
 	//	*Result_Kv
 	//	*Result_S
 	//	*Result_Failure
+	//	*Result_Config
 	Result               isResult_Result `protobuf_oneof:"result"`
 	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
 	XXX_unrecognized     []byte          `json:"-"`
@@ -476,6 +492,10 @@ type Result_Failure struct {
 	Failure *Failure `protobuf:"bytes,4,opt,name=failure,proto3,oneof"`
 }
 
+type Result_Config struct {
+	Config *ShardConfig `protobuf:"bytes,5,opt,name=config,proto3,oneof"`
+}
+
 func (*Result_Redirect) isResult_Result() {}
 
 func (*Result_Kv) isResult_Result() {}
@@ -483,6 +503,8 @@ func (*Result_Kv) isResult_Result() {}
 func (*Result_S) isResult_Result() {}
 
 func (*Result_Failure) isResult_Result() {}
+
+func (*Result_Config) isResult_Result() {}
 
 func (m *Result) GetResult() isResult_Result {
 	if m != nil {
@@ -519,6 +541,13 @@ func (m *Result) GetFailure() *Failure {
 	return nil
 }
 
+func (m *Result) GetConfig() *ShardConfig {
+	if x, ok := m.GetResult().(*Result_Config); ok {
+		return x.Config
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*Result) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
 	return _Result_OneofMarshaler, _Result_OneofUnmarshaler, _Result_OneofSizer, []interface{}{
@@ -526,6 +555,7 @@ func (*Result) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error,
 		(*Result_Kv)(nil),
 		(*Result_S)(nil),
 		(*Result_Failure)(nil),
+		(*Result_Config)(nil),
 	}
 }
 
@@ -551,6 +581,11 @@ func _Result_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *Result_Failure:
 		b.EncodeVarint(4<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Failure); err != nil {
+			return err
+		}
+	case *Result_Config:
+		b.EncodeVarint(5<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Config); err != nil {
 			return err
 		}
 	case nil:
@@ -595,6 +630,14 @@ func _Result_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer)
 		err := b.DecodeMessage(msg)
 		m.Result = &Result_Failure{msg}
 		return true, err
+	case 5: // result.config
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ShardConfig)
+		err := b.DecodeMessage(msg)
+		m.Result = &Result_Config{msg}
+		return true, err
 	default:
 		return false, nil
 	}
@@ -624,6 +667,11 @@ func _Result_OneofSizer(msg proto.Message) (n int) {
 		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
+	case *Result_Config:
+		s := proto.Size(x.Config)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
 	case nil:
 	default:
 		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
@@ -639,6 +687,11 @@ type Command struct {
 	//	*Command_Set
 	//	*Command_Clear
 	//	*Command_Cas
+	//	*Command_JoinArgs
+	//	*Command_LeaveArgs
+	//	*Command_MoveArgs
+	//	*Command_QueryArgs
+	//	*Command_ShardConfig
 	//	*Command_Servers
 	Arg                  isCommand_Arg `protobuf_oneof:"arg"`
 	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
@@ -698,8 +751,28 @@ type Command_Cas struct {
 	Cas *CASArg `protobuf:"bytes,5,opt,name=cas,proto3,oneof"`
 }
 
+type Command_JoinArgs struct {
+	JoinArgs *JoinArgs `protobuf:"bytes,6,opt,name=joinArgs,proto3,oneof"`
+}
+
+type Command_LeaveArgs struct {
+	LeaveArgs *LeaveArgs `protobuf:"bytes,7,opt,name=leaveArgs,proto3,oneof"`
+}
+
+type Command_MoveArgs struct {
+	MoveArgs *MoveArgs `protobuf:"bytes,8,opt,name=moveArgs,proto3,oneof"`
+}
+
+type Command_QueryArgs struct {
+	QueryArgs *QueryArgs `protobuf:"bytes,9,opt,name=queryArgs,proto3,oneof"`
+}
+
+type Command_ShardConfig struct {
+	ShardConfig *ShardConfig `protobuf:"bytes,10,opt,name=shardConfig,proto3,oneof"`
+}
+
 type Command_Servers struct {
-	Servers *Servers `protobuf:"bytes,6,opt,name=servers,proto3,oneof"`
+	Servers *Servers `protobuf:"bytes,11,opt,name=servers,proto3,oneof"`
 }
 
 func (*Command_Get) isCommand_Arg() {}
@@ -709,6 +782,16 @@ func (*Command_Set) isCommand_Arg() {}
 func (*Command_Clear) isCommand_Arg() {}
 
 func (*Command_Cas) isCommand_Arg() {}
+
+func (*Command_JoinArgs) isCommand_Arg() {}
+
+func (*Command_LeaveArgs) isCommand_Arg() {}
+
+func (*Command_MoveArgs) isCommand_Arg() {}
+
+func (*Command_QueryArgs) isCommand_Arg() {}
+
+func (*Command_ShardConfig) isCommand_Arg() {}
 
 func (*Command_Servers) isCommand_Arg() {}
 
@@ -747,6 +830,41 @@ func (m *Command) GetCas() *CASArg {
 	return nil
 }
 
+func (m *Command) GetJoinArgs() *JoinArgs {
+	if x, ok := m.GetArg().(*Command_JoinArgs); ok {
+		return x.JoinArgs
+	}
+	return nil
+}
+
+func (m *Command) GetLeaveArgs() *LeaveArgs {
+	if x, ok := m.GetArg().(*Command_LeaveArgs); ok {
+		return x.LeaveArgs
+	}
+	return nil
+}
+
+func (m *Command) GetMoveArgs() *MoveArgs {
+	if x, ok := m.GetArg().(*Command_MoveArgs); ok {
+		return x.MoveArgs
+	}
+	return nil
+}
+
+func (m *Command) GetQueryArgs() *QueryArgs {
+	if x, ok := m.GetArg().(*Command_QueryArgs); ok {
+		return x.QueryArgs
+	}
+	return nil
+}
+
+func (m *Command) GetShardConfig() *ShardConfig {
+	if x, ok := m.GetArg().(*Command_ShardConfig); ok {
+		return x.ShardConfig
+	}
+	return nil
+}
+
 func (m *Command) GetServers() *Servers {
 	if x, ok := m.GetArg().(*Command_Servers); ok {
 		return x.Servers
@@ -761,6 +879,11 @@ func (*Command) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error
 		(*Command_Set)(nil),
 		(*Command_Clear)(nil),
 		(*Command_Cas)(nil),
+		(*Command_JoinArgs)(nil),
+		(*Command_LeaveArgs)(nil),
+		(*Command_MoveArgs)(nil),
+		(*Command_QueryArgs)(nil),
+		(*Command_ShardConfig)(nil),
 		(*Command_Servers)(nil),
 	}
 }
@@ -789,8 +912,33 @@ func _Command_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 		if err := b.EncodeMessage(x.Cas); err != nil {
 			return err
 		}
-	case *Command_Servers:
+	case *Command_JoinArgs:
 		b.EncodeVarint(6<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.JoinArgs); err != nil {
+			return err
+		}
+	case *Command_LeaveArgs:
+		b.EncodeVarint(7<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.LeaveArgs); err != nil {
+			return err
+		}
+	case *Command_MoveArgs:
+		b.EncodeVarint(8<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.MoveArgs); err != nil {
+			return err
+		}
+	case *Command_QueryArgs:
+		b.EncodeVarint(9<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.QueryArgs); err != nil {
+			return err
+		}
+	case *Command_ShardConfig:
+		b.EncodeVarint(10<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ShardConfig); err != nil {
+			return err
+		}
+	case *Command_Servers:
+		b.EncodeVarint(11<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Servers); err != nil {
 			return err
 		}
@@ -836,7 +984,47 @@ func _Command_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer
 		err := b.DecodeMessage(msg)
 		m.Arg = &Command_Cas{msg}
 		return true, err
-	case 6: // arg.servers
+	case 6: // arg.joinArgs
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(JoinArgs)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_JoinArgs{msg}
+		return true, err
+	case 7: // arg.leaveArgs
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(LeaveArgs)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_LeaveArgs{msg}
+		return true, err
+	case 8: // arg.moveArgs
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(MoveArgs)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_MoveArgs{msg}
+		return true, err
+	case 9: // arg.queryArgs
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(QueryArgs)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_QueryArgs{msg}
+		return true, err
+	case 10: // arg.shardConfig
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ShardConfig)
+		err := b.DecodeMessage(msg)
+		m.Arg = &Command_ShardConfig{msg}
+		return true, err
+	case 11: // arg.servers
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
@@ -870,6 +1058,31 @@ func _Command_OneofSizer(msg proto.Message) (n int) {
 		n += s
 	case *Command_Cas:
 		s := proto.Size(x.Cas)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Command_JoinArgs:
+		s := proto.Size(x.JoinArgs)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Command_LeaveArgs:
+		s := proto.Size(x.LeaveArgs)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Command_MoveArgs:
+		s := proto.Size(x.MoveArgs)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Command_QueryArgs:
+		s := proto.Size(x.QueryArgs)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *Command_ShardConfig:
+		s := proto.Size(x.ShardConfig)
 		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
@@ -1340,6 +1553,484 @@ func (m *RequestVoteRet) GetVoteGranted() bool {
 	return false
 }
 
+//============================= for shard master =================================//
+type ServerList struct {
+	List                 []string `protobuf:"bytes,1,rep,name=list,proto3" json:"list,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ServerList) Reset()         { *m = ServerList{} }
+func (m *ServerList) String() string { return proto.CompactTextString(m) }
+func (*ServerList) ProtoMessage()    {}
+func (*ServerList) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{19}
+}
+
+func (m *ServerList) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ServerList.Unmarshal(m, b)
+}
+func (m *ServerList) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ServerList.Marshal(b, m, deterministic)
+}
+func (m *ServerList) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ServerList.Merge(m, src)
+}
+func (m *ServerList) XXX_Size() int {
+	return xxx_messageInfo_ServerList.Size(m)
+}
+func (m *ServerList) XXX_DiscardUnknown() {
+	xxx_messageInfo_ServerList.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ServerList proto.InternalMessageInfo
+
+func (m *ServerList) GetList() []string {
+	if m != nil {
+		return m.List
+	}
+	return nil
+}
+
+type GroupIDs struct {
+	Ids                  []int64  `protobuf:"varint,1,rep,packed,name=ids,proto3" json:"ids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GroupIDs) Reset()         { *m = GroupIDs{} }
+func (m *GroupIDs) String() string { return proto.CompactTextString(m) }
+func (*GroupIDs) ProtoMessage()    {}
+func (*GroupIDs) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{20}
+}
+
+func (m *GroupIDs) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GroupIDs.Unmarshal(m, b)
+}
+func (m *GroupIDs) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GroupIDs.Marshal(b, m, deterministic)
+}
+func (m *GroupIDs) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GroupIDs.Merge(m, src)
+}
+func (m *GroupIDs) XXX_Size() int {
+	return xxx_messageInfo_GroupIDs.Size(m)
+}
+func (m *GroupIDs) XXX_DiscardUnknown() {
+	xxx_messageInfo_GroupIDs.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GroupIDs proto.InternalMessageInfo
+
+func (m *GroupIDs) GetIds() []int64 {
+	if m != nil {
+		return m.Ids
+	}
+	return nil
+}
+
+type ShardsMapping struct {
+	Gids                 []int64  `protobuf:"varint,1,rep,packed,name=gids,proto3" json:"gids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ShardsMapping) Reset()         { *m = ShardsMapping{} }
+func (m *ShardsMapping) String() string { return proto.CompactTextString(m) }
+func (*ShardsMapping) ProtoMessage()    {}
+func (*ShardsMapping) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{21}
+}
+
+func (m *ShardsMapping) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ShardsMapping.Unmarshal(m, b)
+}
+func (m *ShardsMapping) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ShardsMapping.Marshal(b, m, deterministic)
+}
+func (m *ShardsMapping) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ShardsMapping.Merge(m, src)
+}
+func (m *ShardsMapping) XXX_Size() int {
+	return xxx_messageInfo_ShardsMapping.Size(m)
+}
+func (m *ShardsMapping) XXX_DiscardUnknown() {
+	xxx_messageInfo_ShardsMapping.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ShardsMapping proto.InternalMessageInfo
+
+func (m *ShardsMapping) GetGids() []int64 {
+	if m != nil {
+		return m.Gids
+	}
+	return nil
+}
+
+type GroupServersMap struct {
+	Map                  map[int64]*ServerList `protobuf:"bytes,1,rep,name=map,proto3" json:"map,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_unrecognized     []byte                `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
+}
+
+func (m *GroupServersMap) Reset()         { *m = GroupServersMap{} }
+func (m *GroupServersMap) String() string { return proto.CompactTextString(m) }
+func (*GroupServersMap) ProtoMessage()    {}
+func (*GroupServersMap) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{22}
+}
+
+func (m *GroupServersMap) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GroupServersMap.Unmarshal(m, b)
+}
+func (m *GroupServersMap) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GroupServersMap.Marshal(b, m, deterministic)
+}
+func (m *GroupServersMap) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GroupServersMap.Merge(m, src)
+}
+func (m *GroupServersMap) XXX_Size() int {
+	return xxx_messageInfo_GroupServersMap.Size(m)
+}
+func (m *GroupServersMap) XXX_DiscardUnknown() {
+	xxx_messageInfo_GroupServersMap.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GroupServersMap proto.InternalMessageInfo
+
+func (m *GroupServersMap) GetMap() map[int64]*ServerList {
+	if m != nil {
+		return m.Map
+	}
+	return nil
+}
+
+type ShardConfig struct {
+	Num                  int64            `protobuf:"varint,1,opt,name=num,proto3" json:"num,omitempty"`
+	ShardsGroupMap       *ShardsMapping   `protobuf:"bytes,2,opt,name=shardsGroupMap,proto3" json:"shardsGroupMap,omitempty"`
+	Servers              *GroupServersMap `protobuf:"bytes,3,opt,name=servers,proto3" json:"servers,omitempty"`
+	MaxConfigNum         int64            `protobuf:"varint,4,opt,name=maxConfigNum,proto3" json:"maxConfigNum,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
+}
+
+func (m *ShardConfig) Reset()         { *m = ShardConfig{} }
+func (m *ShardConfig) String() string { return proto.CompactTextString(m) }
+func (*ShardConfig) ProtoMessage()    {}
+func (*ShardConfig) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{23}
+}
+
+func (m *ShardConfig) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ShardConfig.Unmarshal(m, b)
+}
+func (m *ShardConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ShardConfig.Marshal(b, m, deterministic)
+}
+func (m *ShardConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ShardConfig.Merge(m, src)
+}
+func (m *ShardConfig) XXX_Size() int {
+	return xxx_messageInfo_ShardConfig.Size(m)
+}
+func (m *ShardConfig) XXX_DiscardUnknown() {
+	xxx_messageInfo_ShardConfig.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ShardConfig proto.InternalMessageInfo
+
+func (m *ShardConfig) GetNum() int64 {
+	if m != nil {
+		return m.Num
+	}
+	return 0
+}
+
+func (m *ShardConfig) GetShardsGroupMap() *ShardsMapping {
+	if m != nil {
+		return m.ShardsGroupMap
+	}
+	return nil
+}
+
+func (m *ShardConfig) GetServers() *GroupServersMap {
+	if m != nil {
+		return m.Servers
+	}
+	return nil
+}
+
+func (m *ShardConfig) GetMaxConfigNum() int64 {
+	if m != nil {
+		return m.MaxConfigNum
+	}
+	return 0
+}
+
+type JoinArgs struct {
+	Servers              *GroupServersMap `protobuf:"bytes,1,opt,name=servers,proto3" json:"servers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
+}
+
+func (m *JoinArgs) Reset()         { *m = JoinArgs{} }
+func (m *JoinArgs) String() string { return proto.CompactTextString(m) }
+func (*JoinArgs) ProtoMessage()    {}
+func (*JoinArgs) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{24}
+}
+
+func (m *JoinArgs) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_JoinArgs.Unmarshal(m, b)
+}
+func (m *JoinArgs) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_JoinArgs.Marshal(b, m, deterministic)
+}
+func (m *JoinArgs) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_JoinArgs.Merge(m, src)
+}
+func (m *JoinArgs) XXX_Size() int {
+	return xxx_messageInfo_JoinArgs.Size(m)
+}
+func (m *JoinArgs) XXX_DiscardUnknown() {
+	xxx_messageInfo_JoinArgs.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_JoinArgs proto.InternalMessageInfo
+
+func (m *JoinArgs) GetServers() *GroupServersMap {
+	if m != nil {
+		return m.Servers
+	}
+	return nil
+}
+
+type LeaveArgs struct {
+	Gids                 *GroupIDs `protobuf:"bytes,1,opt,name=gids,proto3" json:"gids,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_unrecognized     []byte    `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
+}
+
+func (m *LeaveArgs) Reset()         { *m = LeaveArgs{} }
+func (m *LeaveArgs) String() string { return proto.CompactTextString(m) }
+func (*LeaveArgs) ProtoMessage()    {}
+func (*LeaveArgs) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{25}
+}
+
+func (m *LeaveArgs) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_LeaveArgs.Unmarshal(m, b)
+}
+func (m *LeaveArgs) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_LeaveArgs.Marshal(b, m, deterministic)
+}
+func (m *LeaveArgs) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LeaveArgs.Merge(m, src)
+}
+func (m *LeaveArgs) XXX_Size() int {
+	return xxx_messageInfo_LeaveArgs.Size(m)
+}
+func (m *LeaveArgs) XXX_DiscardUnknown() {
+	xxx_messageInfo_LeaveArgs.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LeaveArgs proto.InternalMessageInfo
+
+func (m *LeaveArgs) GetGids() *GroupIDs {
+	if m != nil {
+		return m.Gids
+	}
+	return nil
+}
+
+type MoveArgs struct {
+	Shard                int64    `protobuf:"varint,1,opt,name=shard,proto3" json:"shard,omitempty"`
+	Gid                  int64    `protobuf:"varint,2,opt,name=gid,proto3" json:"gid,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *MoveArgs) Reset()         { *m = MoveArgs{} }
+func (m *MoveArgs) String() string { return proto.CompactTextString(m) }
+func (*MoveArgs) ProtoMessage()    {}
+func (*MoveArgs) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{26}
+}
+
+func (m *MoveArgs) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_MoveArgs.Unmarshal(m, b)
+}
+func (m *MoveArgs) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_MoveArgs.Marshal(b, m, deterministic)
+}
+func (m *MoveArgs) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MoveArgs.Merge(m, src)
+}
+func (m *MoveArgs) XXX_Size() int {
+	return xxx_messageInfo_MoveArgs.Size(m)
+}
+func (m *MoveArgs) XXX_DiscardUnknown() {
+	xxx_messageInfo_MoveArgs.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MoveArgs proto.InternalMessageInfo
+
+func (m *MoveArgs) GetShard() int64 {
+	if m != nil {
+		return m.Shard
+	}
+	return 0
+}
+
+func (m *MoveArgs) GetGid() int64 {
+	if m != nil {
+		return m.Gid
+	}
+	return 0
+}
+
+type QueryArgs struct {
+	Num                  int64    `protobuf:"varint,1,opt,name=num,proto3" json:"num,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *QueryArgs) Reset()         { *m = QueryArgs{} }
+func (m *QueryArgs) String() string { return proto.CompactTextString(m) }
+func (*QueryArgs) ProtoMessage()    {}
+func (*QueryArgs) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{27}
+}
+
+func (m *QueryArgs) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_QueryArgs.Unmarshal(m, b)
+}
+func (m *QueryArgs) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_QueryArgs.Marshal(b, m, deterministic)
+}
+func (m *QueryArgs) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryArgs.Merge(m, src)
+}
+func (m *QueryArgs) XXX_Size() int {
+	return xxx_messageInfo_QueryArgs.Size(m)
+}
+func (m *QueryArgs) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryArgs.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryArgs proto.InternalMessageInfo
+
+func (m *QueryArgs) GetNum() int64 {
+	if m != nil {
+		return m.Num
+	}
+	return 0
+}
+
+type ShardMigrationArgs struct {
+	Shard                int64    `protobuf:"varint,1,opt,name=shard,proto3" json:"shard,omitempty"`
+	ConfigNum            int64    `protobuf:"varint,2,opt,name=configNum,proto3" json:"configNum,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ShardMigrationArgs) Reset()         { *m = ShardMigrationArgs{} }
+func (m *ShardMigrationArgs) String() string { return proto.CompactTextString(m) }
+func (*ShardMigrationArgs) ProtoMessage()    {}
+func (*ShardMigrationArgs) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{28}
+}
+
+func (m *ShardMigrationArgs) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ShardMigrationArgs.Unmarshal(m, b)
+}
+func (m *ShardMigrationArgs) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ShardMigrationArgs.Marshal(b, m, deterministic)
+}
+func (m *ShardMigrationArgs) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ShardMigrationArgs.Merge(m, src)
+}
+func (m *ShardMigrationArgs) XXX_Size() int {
+	return xxx_messageInfo_ShardMigrationArgs.Size(m)
+}
+func (m *ShardMigrationArgs) XXX_DiscardUnknown() {
+	xxx_messageInfo_ShardMigrationArgs.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ShardMigrationArgs proto.InternalMessageInfo
+
+func (m *ShardMigrationArgs) GetShard() int64 {
+	if m != nil {
+		return m.Shard
+	}
+	return 0
+}
+
+func (m *ShardMigrationArgs) GetConfigNum() int64 {
+	if m != nil {
+		return m.ConfigNum
+	}
+	return 0
+}
+
+type ShardMigrationReply struct {
+	MigStore             map[string]string `protobuf:"bytes,1,rep,name=migStore,proto3" json:"migStore,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Success              bool              `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
+}
+
+func (m *ShardMigrationReply) Reset()         { *m = ShardMigrationReply{} }
+func (m *ShardMigrationReply) String() string { return proto.CompactTextString(m) }
+func (*ShardMigrationReply) ProtoMessage()    {}
+func (*ShardMigrationReply) Descriptor() ([]byte, []int) {
+	return fileDescriptor_2216fe83c9c12408, []int{29}
+}
+
+func (m *ShardMigrationReply) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ShardMigrationReply.Unmarshal(m, b)
+}
+func (m *ShardMigrationReply) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ShardMigrationReply.Marshal(b, m, deterministic)
+}
+func (m *ShardMigrationReply) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ShardMigrationReply.Merge(m, src)
+}
+func (m *ShardMigrationReply) XXX_Size() int {
+	return xxx_messageInfo_ShardMigrationReply.Size(m)
+}
+func (m *ShardMigrationReply) XXX_DiscardUnknown() {
+	xxx_messageInfo_ShardMigrationReply.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ShardMigrationReply proto.InternalMessageInfo
+
+func (m *ShardMigrationReply) GetMigStore() map[string]string {
+	if m != nil {
+		return m.MigStore
+	}
+	return nil
+}
+
+func (m *ShardMigrationReply) GetSuccess() bool {
+	if m != nil {
+		return m.Success
+	}
+	return false
+}
+
 func init() {
 	proto.RegisterEnum("pb.Op", Op_name, Op_value)
 	proto.RegisterType((*Key)(nil), "pb.Key")
@@ -1361,68 +2052,113 @@ func init() {
 	proto.RegisterType((*InstallSnapshotRet)(nil), "pb.InstallSnapshotRet")
 	proto.RegisterType((*RequestVoteArgs)(nil), "pb.RequestVoteArgs")
 	proto.RegisterType((*RequestVoteRet)(nil), "pb.RequestVoteRet")
+	proto.RegisterType((*ServerList)(nil), "pb.ServerList")
+	proto.RegisterType((*GroupIDs)(nil), "pb.GroupIDs")
+	proto.RegisterType((*ShardsMapping)(nil), "pb.ShardsMapping")
+	proto.RegisterType((*GroupServersMap)(nil), "pb.GroupServersMap")
+	proto.RegisterMapType((map[int64]*ServerList)(nil), "pb.GroupServersMap.MapEntry")
+	proto.RegisterType((*ShardConfig)(nil), "pb.ShardConfig")
+	proto.RegisterType((*JoinArgs)(nil), "pb.JoinArgs")
+	proto.RegisterType((*LeaveArgs)(nil), "pb.LeaveArgs")
+	proto.RegisterType((*MoveArgs)(nil), "pb.MoveArgs")
+	proto.RegisterType((*QueryArgs)(nil), "pb.QueryArgs")
+	proto.RegisterType((*ShardMigrationArgs)(nil), "pb.ShardMigrationArgs")
+	proto.RegisterType((*ShardMigrationReply)(nil), "pb.ShardMigrationReply")
+	proto.RegisterMapType((map[string]string)(nil), "pb.ShardMigrationReply.MigStoreEntry")
 }
 
 func init() { proto.RegisterFile("kv.proto", fileDescriptor_2216fe83c9c12408) }
 
 var fileDescriptor_2216fe83c9c12408 = []byte{
-	// 890 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0xe1, 0x6e, 0xe3, 0x44,
-	0x10, 0x8e, 0xe3, 0x38, 0x4e, 0x26, 0xa5, 0x17, 0xa6, 0xc7, 0x5d, 0x48, 0xef, 0x7a, 0x39, 0x83,
-	0x04, 0x3a, 0x89, 0x0a, 0x85, 0x3f, 0x88, 0x1f, 0x40, 0xea, 0x4b, 0x93, 0xaa, 0x15, 0x45, 0x9b,
-	0xea, 0xfe, 0xa2, 0xad, 0xbd, 0xf5, 0x59, 0x75, 0x6c, 0xb3, 0xbb, 0x09, 0xe4, 0x0d, 0x90, 0x78,
-	0x0d, 0xde, 0x83, 0x7f, 0x3c, 0x00, 0x6f, 0xc0, 0x9b, 0xa0, 0x5d, 0x6f, 0x52, 0x3b, 0x49, 0x7f,
-	0xc0, 0xbf, 0x9d, 0xef, 0x9b, 0x99, 0xfd, 0x66, 0x66, 0x3d, 0x86, 0xd6, 0xfd, 0xf2, 0x34, 0xe7,
-	0x99, 0xcc, 0xb0, 0x9e, 0xdf, 0x7a, 0xcf, 0xc1, 0xbe, 0x64, 0x2b, 0xec, 0x82, 0x7d, 0xcf, 0x56,
-	0x3d, 0x6b, 0x60, 0x7d, 0xde, 0x26, 0xea, 0xe8, 0xbd, 0x04, 0xe7, 0x1d, 0x4d, 0x16, 0x0c, 0x9f,
-	0x82, 0xb3, 0x54, 0x07, 0x43, 0x16, 0x86, 0x37, 0x84, 0xd6, 0x25, 0x5b, 0x15, 0x1e, 0x3b, 0xc1,
-	0x0f, 0x31, 0xf5, 0x72, 0x4c, 0x1b, 0xdc, 0xd9, 0x22, 0x08, 0x98, 0x10, 0xde, 0x31, 0xb8, 0xe7,
-	0x34, 0x4e, 0x16, 0x5c, 0x47, 0xcf, 0x45, 0xb4, 0x8e, 0x9e, 0x8b, 0xc8, 0xfb, 0x18, 0x9c, 0x31,
-	0xe7, 0x19, 0xdf, 0x43, 0x4d, 0xa0, 0xe9, 0x8f, 0x66, 0x23, 0x1e, 0xe1, 0x0b, 0xa8, 0xdf, 0x2f,
-	0x35, 0xd5, 0x19, 0x1e, 0x9c, 0xe6, 0xb7, 0xa7, 0x6b, 0x39, 0xa4, 0x7e, 0xbf, 0xc4, 0x57, 0x65,
-	0x01, 0x9d, 0x61, 0x5b, 0x39, 0x14, 0xac, 0xd1, 0xe2, 0x82, 0x33, 0x9e, 0xe7, 0x72, 0xe5, 0x79,
-	0xd0, 0x22, 0x2c, 0x8c, 0x39, 0x0b, 0x24, 0x3e, 0x83, 0xa6, 0x60, 0x7c, 0xc9, 0xb8, 0xb9, 0xd2,
-	0x58, 0xde, 0x1f, 0x16, 0x34, 0x09, 0x13, 0x8b, 0x44, 0xe2, 0x1b, 0x68, 0x71, 0xe3, 0x5e, 0xbe,
-	0x7c, 0x9d, 0x62, 0x5a, 0x23, 0x1b, 0x1e, 0x4f, 0xb4, 0xc4, 0xfa, 0xae, 0xc4, 0x69, 0x4d, 0x8b,
-	0x3c, 0x06, 0x4b, 0xf4, 0x6c, 0x4d, 0x77, 0x14, 0x6d, 0x9a, 0x33, 0xad, 0x11, 0x4b, 0xe0, 0x67,
-	0xe0, 0xde, 0x15, 0x1d, 0xea, 0x35, 0x1e, 0x5c, 0x4c, 0xd3, 0xa6, 0x35, 0xb2, 0x66, 0xcf, 0x5a,
-	0xd0, 0xe4, 0x5a, 0x9b, 0xf7, 0x8f, 0x05, 0xae, 0x9f, 0xcd, 0xe7, 0x34, 0x0d, 0xf1, 0x53, 0x68,
-	0x67, 0x39, 0xe3, 0x54, 0xc6, 0x59, 0xaa, 0x85, 0x1e, 0x0e, 0x9b, 0x2a, 0xc1, 0x75, 0x4e, 0x1e,
-	0x08, 0x3c, 0x06, 0x3b, 0x62, 0xd2, 0x48, 0x74, 0x8d, 0xc4, 0x69, 0x8d, 0x28, 0x14, 0x07, 0x60,
-	0x0b, 0x26, 0x8d, 0xc0, 0x6d, 0xfd, 0x8a, 0xc2, 0xd7, 0xe0, 0x04, 0x09, 0xa3, 0xdc, 0x28, 0xd4,
-	0x5d, 0xd6, 0x5d, 0x9d, 0xd6, 0x48, 0xc1, 0xe0, 0x09, 0xd8, 0x01, 0x15, 0x3d, 0x47, 0x3b, 0x80,
-	0x72, 0x28, 0xe6, 0xa7, 0x52, 0x04, 0x54, 0x97, 0x59, 0x34, 0x59, 0xf4, 0x9a, 0xa5, 0x4e, 0x14,
-	0x90, 0x2a, 0xd3, 0xb0, 0x67, 0x0e, 0xd8, 0x94, 0x47, 0xde, 0x77, 0xe0, 0x1a, 0x12, 0xfb, 0xd0,
-	0x0a, 0x16, 0x9c, 0x5f, 0xc5, 0x42, 0x9a, 0x79, 0x6d, 0x6c, 0xec, 0x81, 0x9b, 0xb2, 0x5f, 0x34,
-	0x55, 0x3c, 0xc1, 0xb5, 0xe9, 0xfd, 0x08, 0xce, 0x38, 0x95, 0x7c, 0x85, 0x08, 0x0d, 0xc9, 0xf8,
-	0x5c, 0x87, 0xda, 0x44, 0x9f, 0xd5, 0xbb, 0x8d, 0xd3, 0x90, 0xfd, 0xaa, 0x83, 0x6c, 0x52, 0x18,
-	0xf8, 0x12, 0xec, 0x60, 0x1e, 0x96, 0x27, 0x65, 0xba, 0x4c, 0x14, 0xee, 0xfd, 0x6d, 0xc1, 0x87,
-	0xa3, 0x3c, 0x67, 0x69, 0xa8, 0x12, 0xc7, 0x4c, 0x8c, 0x78, 0x24, 0xf6, 0xa6, 0xef, 0x43, 0x2b,
-	0x61, 0x34, 0x64, 0xfc, 0xe2, 0xad, 0x91, 0xb5, 0xb1, 0xd1, 0x83, 0x83, 0x9c, 0xb3, 0xe5, 0x55,
-	0x16, 0x5d, 0x68, 0x05, 0xb6, 0x8e, 0xab, 0x60, 0x38, 0x80, 0x8e, 0xb1, 0x6f, 0x54, 0xea, 0x86,
-	0x76, 0x29, 0x43, 0x2a, 0x4b, 0x91, 0x51, 0x29, 0x8c, 0xa5, 0xee, 0xbb, 0x4d, 0x2a, 0x18, 0x7e,
-	0x02, 0x2e, 0x2b, 0x84, 0xf6, 0x9a, 0x03, 0x7b, 0x33, 0x37, 0xd5, 0x14, 0xb2, 0x66, 0xbc, 0xef,
-	0xa1, 0x5b, 0xa9, 0x89, 0x30, 0xb9, 0xb7, 0xa4, 0x1e, 0xb8, 0xa2, 0x78, 0xb6, 0xba, 0xa2, 0x16,
-	0x59, 0x9b, 0xde, 0x6f, 0x16, 0x1c, 0x5d, 0xa4, 0x42, 0xd2, 0x24, 0x99, 0xa5, 0x34, 0x17, 0xef,
-	0x33, 0xf9, 0xbf, 0x1a, 0xf3, 0x05, 0x1c, 0x24, 0x54, 0xc8, 0xab, 0x2c, 0xd2, 0x12, 0xcd, 0x18,
-	0x4a, 0x9a, 0x2b, 0xb4, 0x4a, 0x1f, 0x52, 0x49, 0x75, 0x73, 0x0e, 0x88, 0x3e, 0x7b, 0x67, 0x80,
-	0x5b, 0x4a, 0xfe, 0x7b, 0x39, 0xbf, 0x5b, 0xf0, 0x84, 0xb0, 0x9f, 0x17, 0x4c, 0xc8, 0x77, 0x99,
-	0x64, 0x8f, 0x96, 0x32, 0x80, 0x4e, 0x40, 0xd3, 0x30, 0x0e, 0xa9, 0x64, 0x9b, 0x6a, 0xca, 0x90,
-	0x9e, 0x51, 0xa1, 0xb8, 0x32, 0xe9, 0x32, 0x86, 0x27, 0x00, 0x09, 0x15, 0xd5, 0x41, 0x97, 0x10,
-	0xef, 0x1c, 0x0e, 0x4b, 0x62, 0x1e, 0xab, 0x66, 0x00, 0x9d, 0x65, 0x26, 0xd9, 0x84, 0xd3, 0x54,
-	0xb2, 0xd0, 0x54, 0x54, 0x86, 0xde, 0x7c, 0x03, 0xf5, 0xeb, 0x1c, 0x5d, 0xb0, 0x27, 0xe3, 0x9b,
-	0x6e, 0x4d, 0x1d, 0x66, 0xe3, 0x9b, 0xae, 0x85, 0x6d, 0x70, 0xfc, 0xab, 0xf1, 0x88, 0x74, 0xeb,
-	0x0a, 0xf3, 0x47, 0xb3, 0xae, 0x8d, 0x87, 0x00, 0xfe, 0xf5, 0x0f, 0xe7, 0x17, 0x93, 0x9f, 0xfc,
-	0xe9, 0xa4, 0xdb, 0x18, 0xfe, 0x69, 0x81, 0x7b, 0xb9, 0x9c, 0xc9, 0x8c, 0x33, 0x7c, 0x01, 0xf6,
-	0x84, 0x49, 0x5c, 0xaf, 0x90, 0x3e, 0x14, 0x4b, 0x51, 0xaf, 0xa5, 0x1a, 0xbe, 0x06, 0x7b, 0xc6,
-	0x24, 0x56, 0x76, 0xc8, 0x96, 0xcb, 0x00, 0x1c, 0x5f, 0x2f, 0x8c, 0x87, 0x25, 0xb2, 0xe5, 0xf1,
-	0x4a, 0xeb, 0xc0, 0xd2, 0x0e, 0xd9, 0x72, 0xf8, 0x12, 0x8e, 0xfc, 0xf7, 0x34, 0x8d, 0x98, 0x9f,
-	0xa5, 0x77, 0x71, 0xb4, 0x30, 0x3b, 0xae, 0xbc, 0x50, 0xaa, 0x11, 0xc3, 0xbf, 0x2c, 0x68, 0x10,
-	0x7a, 0x27, 0xf1, 0x5b, 0xf8, 0xa0, 0xf2, 0xda, 0xf1, 0x23, 0xe5, 0xb7, 0xf3, 0x51, 0xf7, 0x9f,
-	0xee, 0xc0, 0x84, 0xa9, 0xab, 0xbf, 0x86, 0x4e, 0x69, 0x1c, 0x78, 0x54, 0xdc, 0x52, 0x79, 0x2c,
-	0x7d, 0xdc, 0x02, 0x8b, 0xc8, 0xb7, 0xf0, 0x64, 0xeb, 0x69, 0xe2, 0x73, 0xe5, 0xb8, 0xe7, 0xcb,
-	0xe9, 0x3f, 0xdb, 0x43, 0xe8, 0x2c, 0xb7, 0x4d, 0xfd, 0x43, 0xff, 0xea, 0xdf, 0x00, 0x00, 0x00,
-	0xff, 0xff, 0xaa, 0x6c, 0x9d, 0x9d, 0xdc, 0x07, 0x00, 0x00,
+	// 1404 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x57, 0x5b, 0x6f, 0xdb, 0xc6,
+	0x12, 0x16, 0x45, 0x49, 0xa4, 0x46, 0xbe, 0x28, 0xe3, 0x9c, 0x44, 0x47, 0x71, 0x12, 0x65, 0x93,
+	0x83, 0x93, 0x06, 0xb0, 0x51, 0x28, 0x2f, 0x49, 0x0b, 0xb4, 0x55, 0x64, 0xd9, 0x72, 0x62, 0xc5,
+	0xcd, 0x2a, 0x35, 0xd0, 0xa7, 0x60, 0x23, 0x6d, 0x18, 0xd6, 0x12, 0xc9, 0x90, 0x94, 0x1a, 0xbf,
+	0xf7, 0xa1, 0x45, 0x7f, 0x4b, 0xd1, 0x7f, 0xd1, 0xa7, 0x02, 0x05, 0xda, 0x3f, 0x54, 0xec, 0x85,
+	0x37, 0xd9, 0x6e, 0x9b, 0xbe, 0xed, 0xce, 0x7c, 0xfb, 0x71, 0x2e, 0xbb, 0x33, 0x43, 0xb0, 0x4f,
+	0x97, 0xbb, 0x41, 0xe8, 0xc7, 0x3e, 0x96, 0x83, 0xd7, 0xe4, 0x3a, 0x98, 0xcf, 0xf8, 0x19, 0x36,
+	0xc1, 0x3c, 0xe5, 0x67, 0x2d, 0xa3, 0x63, 0xdc, 0xaf, 0x53, 0xb1, 0x24, 0x37, 0xa1, 0x7a, 0xc2,
+	0x66, 0x0b, 0x8e, 0x57, 0xa1, 0xba, 0x14, 0x0b, 0xad, 0x54, 0x1b, 0xd2, 0x05, 0xfb, 0x19, 0x3f,
+	0x53, 0x88, 0x73, 0x87, 0xb3, 0x33, 0xe5, 0xfc, 0x99, 0x3a, 0x58, 0xe3, 0xc5, 0x64, 0xc2, 0xa3,
+	0x88, 0xdc, 0x00, 0x6b, 0x9f, 0xb9, 0xb3, 0x45, 0x28, 0x4f, 0xcf, 0x23, 0x27, 0x39, 0x3d, 0x8f,
+	0x1c, 0xf2, 0x5f, 0xa8, 0x0e, 0xc2, 0xd0, 0x0f, 0x2f, 0x50, 0x1d, 0x40, 0xad, 0xdf, 0x1b, 0xf7,
+	0x42, 0x07, 0xb7, 0xa1, 0x7c, 0xba, 0x94, 0xaa, 0x46, 0x77, 0x6d, 0x37, 0x78, 0xbd, 0x9b, 0x98,
+	0x43, 0xcb, 0xa7, 0x4b, 0xbc, 0x9d, 0x37, 0xa0, 0xd1, 0xad, 0x0b, 0x80, 0xd2, 0x6a, 0x5b, 0x2c,
+	0xa8, 0x0e, 0xe6, 0x41, 0x7c, 0x46, 0x08, 0xd8, 0x94, 0x4f, 0xdd, 0x90, 0x4f, 0x62, 0xbc, 0x06,
+	0xb5, 0x88, 0x87, 0x4b, 0x1e, 0xea, 0x4f, 0xea, 0x1d, 0xf9, 0xcd, 0x80, 0x1a, 0xe5, 0xd1, 0x62,
+	0x16, 0xe3, 0x03, 0xb0, 0x43, 0x0d, 0xcf, 0x7f, 0x3c, 0xa1, 0x18, 0x96, 0x68, 0xaa, 0xc7, 0x5b,
+	0xd2, 0xc4, 0xf2, 0x79, 0x13, 0x87, 0x25, 0x69, 0xe4, 0x0d, 0x30, 0xa2, 0x96, 0x29, 0xd5, 0x0d,
+	0xa1, 0xd6, 0xc1, 0x19, 0x96, 0xa8, 0x11, 0xe1, 0xff, 0xc1, 0x7a, 0xa3, 0x22, 0xd4, 0xaa, 0x64,
+	0x10, 0x1d, 0xb4, 0x61, 0x89, 0x26, 0x5a, 0xfc, 0x08, 0x6a, 0x13, 0xdf, 0x7b, 0xe3, 0x3a, 0xad,
+	0xaa, 0xc4, 0x6d, 0x4a, 0xaa, 0xb7, 0x2c, 0x9c, 0xf6, 0xa5, 0x78, 0x58, 0xa2, 0x1a, 0xf0, 0xc4,
+	0x86, 0x5a, 0x28, 0xdd, 0x20, 0xbf, 0x9a, 0x60, 0xf5, 0xfd, 0xf9, 0x9c, 0x79, 0x53, 0xbc, 0x07,
+	0x75, 0x3f, 0xe0, 0x21, 0x8b, 0x5d, 0xdf, 0x93, 0x3e, 0x6d, 0x74, 0x6b, 0x82, 0xe3, 0x38, 0xa0,
+	0x99, 0x02, 0x6f, 0x80, 0xe9, 0xf0, 0x58, 0x7b, 0x63, 0x69, 0x6f, 0x86, 0x25, 0x2a, 0xa4, 0xd8,
+	0x01, 0x33, 0xe2, 0xb1, 0xf6, 0x65, 0xd5, 0x55, 0xa1, 0xc2, 0x3b, 0x50, 0x9d, 0xcc, 0x38, 0x0b,
+	0xb5, 0x33, 0x32, 0x21, 0x32, 0x01, 0xc3, 0x12, 0x55, 0x1a, 0xbc, 0x05, 0xe6, 0x84, 0x45, 0xda,
+	0x0b, 0x10, 0x00, 0x95, 0x6a, 0x41, 0x31, 0x61, 0x91, 0x08, 0xfd, 0x37, 0xbe, 0xeb, 0xf5, 0x42,
+	0x27, 0x6a, 0xd5, 0xb2, 0x2f, 0x3d, 0xd5, 0x32, 0x11, 0xfa, 0x44, 0x8f, 0x3b, 0x50, 0x9f, 0x71,
+	0xb6, 0xe4, 0x12, 0x6c, 0x49, 0xf0, 0xba, 0x00, 0x1f, 0x25, 0xc2, 0x61, 0x89, 0x66, 0x08, 0x41,
+	0x3d, 0xf7, 0x35, 0xda, 0xce, 0xa8, 0x47, 0x7e, 0x0a, 0x4e, 0xf5, 0x82, 0xfa, 0xdd, 0x82, 0x87,
+	0x67, 0x12, 0x5c, 0xcf, 0xa8, 0x5f, 0x24, 0x42, 0x41, 0x9d, 0x22, 0xf0, 0x21, 0x34, 0xa2, 0x2c,
+	0x19, 0x2d, 0xb8, 0x2c, 0x47, 0x79, 0x94, 0x48, 0xbe, 0xba, 0x7a, 0x51, 0xab, 0x91, 0xbb, 0x1f,
+	0x4a, 0x24, 0x92, 0xaf, 0xb5, 0x4f, 0xaa, 0x60, 0xb2, 0xd0, 0x21, 0x9f, 0x83, 0xa5, 0x95, 0xd8,
+	0x06, 0x7b, 0xb2, 0x08, 0xc3, 0x23, 0x37, 0x8a, 0xf5, 0x2d, 0x4e, 0xf7, 0xd8, 0x02, 0xcb, 0xe3,
+	0xdf, 0x4a, 0x95, 0x7a, 0x98, 0xc9, 0x96, 0x7c, 0x09, 0xd5, 0x81, 0x17, 0x87, 0x67, 0x88, 0x50,
+	0x89, 0x79, 0x38, 0x97, 0x47, 0x4d, 0x2a, 0xd7, 0xe2, 0x35, 0xbb, 0xde, 0x94, 0xbf, 0x97, 0x87,
+	0x4c, 0xaa, 0x36, 0x78, 0x13, 0xcc, 0xc9, 0x7c, 0x9a, 0xbf, 0xbf, 0xfa, 0x42, 0x51, 0x21, 0x27,
+	0xbf, 0x1b, 0x70, 0xa5, 0x17, 0x04, 0xdc, 0x9b, 0x0a, 0x62, 0x97, 0x47, 0x32, 0x1a, 0x17, 0xd1,
+	0xb7, 0xc1, 0x9e, 0x71, 0x36, 0xe5, 0xe1, 0xe1, 0x9e, 0x36, 0x2b, 0xdd, 0x23, 0x81, 0xb5, 0x20,
+	0xe4, 0xcb, 0x23, 0xdf, 0x39, 0x94, 0x16, 0x98, 0xf2, 0x5c, 0x41, 0x86, 0x1d, 0x68, 0xe8, 0xfd,
+	0x4b, 0x41, 0x5d, 0x91, 0x90, 0xbc, 0x48, 0xb0, 0x28, 0x46, 0x61, 0xa1, 0x1b, 0xcb, 0x2b, 0x66,
+	0xd2, 0x82, 0x0c, 0xef, 0x82, 0xc5, 0x95, 0xa1, 0xad, 0x5a, 0xc7, 0x4c, 0xaf, 0xa8, 0x08, 0x0a,
+	0x4d, 0x34, 0xe4, 0x0b, 0x68, 0x16, 0x7c, 0xa2, 0x3c, 0xbe, 0xd0, 0xa5, 0x16, 0x58, 0x91, 0x7a,
+	0xcc, 0xd2, 0x23, 0x9b, 0x26, 0x5b, 0xf2, 0xbd, 0x01, 0x5b, 0x87, 0x5e, 0x14, 0xb3, 0xd9, 0x6c,
+	0xec, 0xb1, 0x20, 0x7a, 0xeb, 0xc7, 0xff, 0x2a, 0x30, 0x3b, 0xb0, 0x36, 0x63, 0x51, 0x7c, 0xe4,
+	0x3b, 0xd2, 0x44, 0x9d, 0x86, 0x9c, 0xcd, 0x05, 0xb5, 0xa0, 0x9f, 0xb2, 0x98, 0xc9, 0xe0, 0xac,
+	0x51, 0xb9, 0x26, 0x4f, 0x00, 0x57, 0x2c, 0xf9, 0x70, 0x77, 0x7e, 0x34, 0x60, 0x93, 0xf2, 0x77,
+	0x0b, 0x1e, 0xc5, 0x27, 0x7e, 0xcc, 0x2f, 0x75, 0xa5, 0x03, 0x8d, 0x09, 0xf3, 0xa6, 0xee, 0x94,
+	0xc5, 0x3c, 0xf5, 0x26, 0x2f, 0x92, 0x39, 0x52, 0x16, 0x17, 0x32, 0x9d, 0x97, 0xe1, 0x2d, 0x80,
+	0x19, 0x8b, 0x8a, 0x89, 0xce, 0x49, 0xc8, 0x3e, 0x6c, 0xe4, 0x8c, 0xb9, 0xcc, 0x9b, 0x0e, 0x34,
+	0x96, 0x7e, 0xcc, 0x0f, 0x42, 0xe6, 0xc5, 0x7c, 0xaa, 0x3d, 0xca, 0x8b, 0x48, 0x07, 0x40, 0x3d,
+	0x27, 0xf9, 0x6a, 0x10, 0x2a, 0x33, 0xf5, 0x9a, 0xcc, 0xfb, 0x75, 0x2a, 0xd7, 0x64, 0x1b, 0xec,
+	0x83, 0xd0, 0x5f, 0x04, 0x87, 0x7b, 0x91, 0xe8, 0x52, 0xee, 0x34, 0x92, 0x6a, 0x93, 0x8a, 0x25,
+	0xb9, 0x0b, 0xeb, 0xf2, 0x71, 0x47, 0x23, 0x16, 0x04, 0xae, 0xe7, 0x08, 0x0a, 0x27, 0xc3, 0xc8,
+	0x35, 0xf9, 0xc1, 0x80, 0x4d, 0xc9, 0xa1, 0x5f, 0xee, 0x88, 0x05, 0xb8, 0x0b, 0xe6, 0x9c, 0x05,
+	0x12, 0xd6, 0xe8, 0x6e, 0x8b, 0x64, 0xae, 0x20, 0x76, 0x47, 0x2c, 0x50, 0xf9, 0x15, 0xc0, 0xf6,
+	0x3e, 0xd8, 0x89, 0x20, 0xdf, 0x85, 0x4d, 0xd5, 0x85, 0xef, 0x15, 0x9b, 0xe0, 0x46, 0x56, 0x43,
+	0x84, 0x5f, 0xba, 0x13, 0x7e, 0x52, 0x7e, 0x64, 0x90, 0x9f, 0x0c, 0x68, 0xe4, 0xca, 0x91, 0xe0,
+	0xf2, 0x16, 0x49, 0xd4, 0xc4, 0x12, 0x1f, 0xc3, 0x86, 0x2c, 0x50, 0x91, 0x34, 0x68, 0xc4, 0x02,
+	0x4d, 0x7a, 0x25, 0xad, 0x64, 0x89, 0xb3, 0x74, 0x05, 0x88, 0x3b, 0x59, 0x31, 0x53, 0xb7, 0x74,
+	0xeb, 0x02, 0xc7, 0xd2, 0x92, 0x26, 0x2e, 0xc2, 0x9c, 0xbd, 0x57, 0x86, 0x3c, 0x5f, 0x24, 0x69,
+	0x2e, 0xc8, 0xc8, 0x63, 0xb0, 0x9f, 0x66, 0xa5, 0x3e, 0xa5, 0x37, 0xfe, 0x9e, 0x9e, 0xec, 0x40,
+	0x3d, 0x6d, 0x02, 0xd8, 0x49, 0xf3, 0x92, 0xd6, 0xfc, 0x24, 0xad, 0x3a, 0x4b, 0x5d, 0xb0, 0x93,
+	0x2e, 0x20, 0xea, 0xa0, 0x74, 0x4d, 0xc7, 0x45, 0x6d, 0x44, 0xac, 0x1c, 0x77, 0xaa, 0x6b, 0xa3,
+	0x58, 0x92, 0x9b, 0x50, 0x4f, 0x9b, 0xc1, 0xf9, 0x50, 0x92, 0x21, 0xa0, 0x0c, 0xd8, 0xc8, 0x75,
+	0x54, 0x6f, 0xfd, 0x0b, 0xf2, 0x6d, 0xa8, 0x4f, 0xd2, 0x48, 0xa8, 0x4f, 0x64, 0x02, 0xf2, 0xb3,
+	0x01, 0x5b, 0x45, 0x2a, 0xca, 0x83, 0xd9, 0x19, 0xf6, 0xc0, 0x9e, 0xbb, 0xce, 0x38, 0xf6, 0x43,
+	0xae, 0xef, 0xd2, 0xff, 0xd2, 0x34, 0x15, 0xa1, 0xbb, 0x23, 0x8d, 0x53, 0x97, 0x2a, 0x3d, 0x76,
+	0xf9, 0x93, 0x6f, 0x7f, 0x0a, 0xeb, 0x85, 0x43, 0xff, 0x74, 0xfc, 0x13, 0x17, 0xed, 0xc1, 0x12,
+	0xca, 0xc7, 0x01, 0x5a, 0x60, 0x1e, 0x0c, 0x5e, 0x36, 0x4b, 0x62, 0x31, 0x1e, 0xbc, 0x6c, 0x1a,
+	0x58, 0x87, 0x6a, 0xff, 0x68, 0xd0, 0xa3, 0xcd, 0xb2, 0x90, 0xf5, 0x7b, 0xe3, 0xa6, 0x89, 0x36,
+	0x54, 0x9e, 0x1e, 0x1f, 0x3e, 0x6f, 0x56, 0x84, 0xf6, 0x68, 0xd0, 0x3b, 0x19, 0x34, 0xab, 0x42,
+	0x38, 0x3a, 0x3e, 0x19, 0x34, 0x6b, 0x42, 0xf8, 0xe2, 0xab, 0x01, 0xfd, 0xba, 0x69, 0x61, 0x13,
+	0xd6, 0xc6, 0xc3, 0x1e, 0xdd, 0x7b, 0xd5, 0x3f, 0x7e, 0xbe, 0x7f, 0x78, 0xd0, 0xb4, 0x71, 0x03,
+	0x40, 0xad, 0x5f, 0xf5, 0x87, 0x07, 0xcd, 0x7a, 0xf7, 0xbb, 0x32, 0x58, 0xcf, 0x96, 0xca, 0xb5,
+	0x6d, 0x30, 0x0f, 0x78, 0x8c, 0xc9, 0x0c, 0xd3, 0x06, 0x35, 0xc0, 0xc9, 0xb9, 0xa8, 0x84, 0x77,
+	0xc0, 0x1c, 0xf3, 0x18, 0x0b, 0x43, 0xcc, 0x0a, 0xa4, 0x03, 0xd5, 0xbe, 0x9c, 0x58, 0xb2, 0x29,
+	0x66, 0x05, 0x71, 0x5b, 0xfa, 0x80, 0xb9, 0x21, 0x66, 0x05, 0xd0, 0x87, 0x8d, 0x62, 0x36, 0xf0,
+	0xda, 0xf9, 0x0c, 0x89, 0x7b, 0xd1, 0xbe, 0x7e, 0x49, 0xe6, 0x48, 0x09, 0x3f, 0x86, 0xad, 0xfe,
+	0x5b, 0xe6, 0x39, 0x5c, 0x3d, 0x8c, 0x85, 0x66, 0xca, 0xcf, 0x0a, 0xc5, 0xcf, 0x76, 0x7f, 0x31,
+	0xa0, 0x42, 0xd9, 0x9b, 0x18, 0x3f, 0x83, 0xf5, 0x42, 0x23, 0xc3, 0xff, 0x08, 0xdc, 0xb9, 0x7e,
+	0xdd, 0xbe, 0x7a, 0x4e, 0x4c, 0xb9, 0xb0, 0xff, 0x11, 0x34, 0x72, 0x95, 0x16, 0xb7, 0xd4, 0x57,
+	0x0a, 0x7d, 0xa0, 0x8d, 0x2b, 0x42, 0x75, 0x72, 0x0f, 0x36, 0x57, 0xba, 0x0e, 0x4a, 0x17, 0x2f,
+	0x68, 0x8a, 0xed, 0x6b, 0x17, 0x28, 0x24, 0x4b, 0xf7, 0x8f, 0xa4, 0x60, 0x8d, 0x58, 0x14, 0xf3,
+	0x10, 0x09, 0x54, 0x44, 0x41, 0xc0, 0xc2, 0x44, 0xb8, 0x12, 0xf3, 0x7b, 0x50, 0x95, 0x2f, 0x1f,
+	0x8b, 0x93, 0xe0, 0x0a, 0x8a, 0x40, 0x45, 0x3c, 0x78, 0x2c, 0x0c, 0x80, 0xe7, 0x99, 0xe4, 0x03,
+	0xc7, 0xe2, 0xe0, 0xb7, 0x82, 0xfa, 0xe0, 0xf4, 0xbc, 0xae, 0xc9, 0xff, 0xb2, 0x87, 0x7f, 0x06,
+	0x00, 0x00, 0xff, 0xff, 0x18, 0xe4, 0xa5, 0x5b, 0xa3, 0x0d, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1441,6 +2177,8 @@ type KvStoreClient interface {
 	Set(ctx context.Context, in *KeyValue, opts ...grpc.CallOption) (*Result, error)
 	Clear(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Result, error)
 	CAS(ctx context.Context, in *CASArg, opts ...grpc.CallOption) (*Result, error)
+	ShardMigration(ctx context.Context, in *ShardMigrationArgs, opts ...grpc.CallOption) (*ShardMigrationReply, error)
+	//this is raft membership config, not shard config
 	ChangeConfiguration(ctx context.Context, in *Servers, opts ...grpc.CallOption) (*Result, error)
 }
 
@@ -1488,6 +2226,15 @@ func (c *kvStoreClient) CAS(ctx context.Context, in *CASArg, opts ...grpc.CallOp
 	return out, nil
 }
 
+func (c *kvStoreClient) ShardMigration(ctx context.Context, in *ShardMigrationArgs, opts ...grpc.CallOption) (*ShardMigrationReply, error) {
+	out := new(ShardMigrationReply)
+	err := c.cc.Invoke(ctx, "/pb.KvStore/ShardMigration", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *kvStoreClient) ChangeConfiguration(ctx context.Context, in *Servers, opts ...grpc.CallOption) (*Result, error) {
 	out := new(Result)
 	err := c.cc.Invoke(ctx, "/pb.KvStore/ChangeConfiguration", in, out, opts...)
@@ -1503,6 +2250,8 @@ type KvStoreServer interface {
 	Set(context.Context, *KeyValue) (*Result, error)
 	Clear(context.Context, *Empty) (*Result, error)
 	CAS(context.Context, *CASArg) (*Result, error)
+	ShardMigration(context.Context, *ShardMigrationArgs) (*ShardMigrationReply, error)
+	//this is raft membership config, not shard config
 	ChangeConfiguration(context.Context, *Servers) (*Result, error)
 }
 
@@ -1582,6 +2331,24 @@ func _KvStore_CAS_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KvStore_ShardMigration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShardMigrationArgs)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KvStoreServer).ShardMigration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.KvStore/ShardMigration",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KvStoreServer).ShardMigration(ctx, req.(*ShardMigrationArgs))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KvStore_ChangeConfiguration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Servers)
 	if err := dec(in); err != nil {
@@ -1619,6 +2386,10 @@ var _KvStore_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CAS",
 			Handler:    _KvStore_CAS_Handler,
+		},
+		{
+			MethodName: "ShardMigration",
+			Handler:    _KvStore_ShardMigration_Handler,
 		},
 		{
 			MethodName: "ChangeConfiguration",
@@ -1753,6 +2524,204 @@ var _Raft_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InstallSnapshot",
 			Handler:    _Raft_InstallSnapshot_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "kv.proto",
+}
+
+// ShardMasterClient is the client API for ShardMaster service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type ShardMasterClient interface {
+	Join(ctx context.Context, in *JoinArgs, opts ...grpc.CallOption) (*Result, error)
+	Leave(ctx context.Context, in *LeaveArgs, opts ...grpc.CallOption) (*Result, error)
+	Move(ctx context.Context, in *MoveArgs, opts ...grpc.CallOption) (*Result, error)
+	Query(ctx context.Context, in *QueryArgs, opts ...grpc.CallOption) (*Result, error)
+	//this is raft membership config, not shard config
+	ChangeConfiguration(ctx context.Context, in *Servers, opts ...grpc.CallOption) (*Result, error)
+}
+
+type shardMasterClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewShardMasterClient(cc *grpc.ClientConn) ShardMasterClient {
+	return &shardMasterClient{cc}
+}
+
+func (c *shardMasterClient) Join(ctx context.Context, in *JoinArgs, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/pb.ShardMaster/Join", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *shardMasterClient) Leave(ctx context.Context, in *LeaveArgs, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/pb.ShardMaster/Leave", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *shardMasterClient) Move(ctx context.Context, in *MoveArgs, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/pb.ShardMaster/Move", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *shardMasterClient) Query(ctx context.Context, in *QueryArgs, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/pb.ShardMaster/Query", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *shardMasterClient) ChangeConfiguration(ctx context.Context, in *Servers, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/pb.ShardMaster/ChangeConfiguration", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ShardMasterServer is the server API for ShardMaster service.
+type ShardMasterServer interface {
+	Join(context.Context, *JoinArgs) (*Result, error)
+	Leave(context.Context, *LeaveArgs) (*Result, error)
+	Move(context.Context, *MoveArgs) (*Result, error)
+	Query(context.Context, *QueryArgs) (*Result, error)
+	//this is raft membership config, not shard config
+	ChangeConfiguration(context.Context, *Servers) (*Result, error)
+}
+
+func RegisterShardMasterServer(s *grpc.Server, srv ShardMasterServer) {
+	s.RegisterService(&_ShardMaster_serviceDesc, srv)
+}
+
+func _ShardMaster_Join_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinArgs)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ShardMasterServer).Join(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.ShardMaster/Join",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ShardMasterServer).Join(ctx, req.(*JoinArgs))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ShardMaster_Leave_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveArgs)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ShardMasterServer).Leave(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.ShardMaster/Leave",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ShardMasterServer).Leave(ctx, req.(*LeaveArgs))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ShardMaster_Move_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MoveArgs)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ShardMasterServer).Move(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.ShardMaster/Move",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ShardMasterServer).Move(ctx, req.(*MoveArgs))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ShardMaster_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryArgs)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ShardMasterServer).Query(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.ShardMaster/Query",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ShardMasterServer).Query(ctx, req.(*QueryArgs))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ShardMaster_ChangeConfiguration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Servers)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ShardMasterServer).ChangeConfiguration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pb.ShardMaster/ChangeConfiguration",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ShardMasterServer).ChangeConfiguration(ctx, req.(*Servers))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _ShardMaster_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "pb.ShardMaster",
+	HandlerType: (*ShardMasterServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Join",
+			Handler:    _ShardMaster_Join_Handler,
+		},
+		{
+			MethodName: "Leave",
+			Handler:    _ShardMaster_Leave_Handler,
+		},
+		{
+			MethodName: "Move",
+			Handler:    _ShardMaster_Move_Handler,
+		},
+		{
+			MethodName: "Query",
+			Handler:    _ShardMaster_Query_Handler,
+		},
+		{
+			MethodName: "ChangeConfiguration",
+			Handler:    _ShardMaster_ChangeConfiguration_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

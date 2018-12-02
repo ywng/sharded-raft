@@ -12,7 +12,7 @@ import (
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"github.com/raft/pb"
+	"github.com/sharded-raft/pb"
 )
 
 const (
@@ -26,6 +26,7 @@ const (
 	ELECTION_TIMEOUT_LOWER_BOUND = 1000
 	ELECTION_TIMEOUT_UPPER_BOUND = 4000
 	HEARTBEAT_TIMEOUT            = 500
+	SHARD_QUERY_TIMEOUT          = 100
 	LOG_COMPACTION_LIMIT         = 300 //-1 means no log compaction
 )
 
@@ -109,9 +110,10 @@ type Raft struct {
 	clientsResponse map[int64]chan pb.Result
 
 	//timer & ticker for election timeout and heartbeat
-	electionTimer  *time.Timer
-	heartBeatTimer *time.Timer
-	randSeed       *rand.Rand
+	electionTimer   *time.Timer
+	heartBeatTimer  *time.Timer
+	shardQueryTimer *time.Timer
+	randSeed        *rand.Rand
 
 	//peers
 	peers *arrayPeers
@@ -123,6 +125,10 @@ type Raft struct {
 	configurations Configurations
 	peerClients    map[string]pb.RaftClient
 	killServer     chan int64
+
+	//for sharding
+	shardMasterC pb.ShardMasterClient
+	migrating    bool
 }
 
 //to get the server list from the current active configuration
@@ -180,6 +186,7 @@ func (r *Raft) leaderStatePrep() {
 	r.leader = r.me
 	// reset the heartbeat timer & stop election timer
 	restartTimer(r.heartBeatTimer, HEARTBEAT_TIMEOUT*time.Millisecond)
+	restartTimer(r.shardQueryTimer, SHARD_QUERY_TIMEOUT*time.Millisecond)
 	stopTimer(r.electionTimer)
 
 	//initialise leader's volatile state
@@ -280,6 +287,7 @@ func (r *Raft) fallbackToFollower() {
 	// reset the election timer & stop heartbeat timer
 	restartTimer(r.electionTimer, randomDuration(r.randSeed))
 	stopTimer(r.heartBeatTimer)
+	stopTimer(r.shardQueryTimer)
 }
 
 func (r *Raft) deleteEntryFrom(index int64) {
@@ -411,7 +419,7 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 
 		} else {
 			op := InputChannelType{command: *entry.Cmd, response: responseChan}
-			s.HandleCommand(op)
+			s.HandleCommand(op, r)
 		}
 
 		delete(r.clientsResponse, entry.Index)

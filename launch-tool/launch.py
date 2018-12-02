@@ -14,7 +14,7 @@ def find_pods(v1):
     def pod_filter(p):
         return p.metadata.namespace == "default" and \
                 len(p.spec.containers) == 1 and \
-                p.spec.containers[0].image == 'local/raft-peer'
+                p.spec.containers[0].image == 'local/sharded-raft-peer'
     pods_we_own = filter(pod_filter, ret.items)
     return pods_we_own
 
@@ -98,7 +98,7 @@ def boot(args):
         pod_spec = specs[0]
         service_spec = specs[1]
         num_services = args.peers
-        peers = ['peer%d'%i for i in range(num_services)]
+        peers = ['peer%d-%d'%(args.sg, i) for i in range(num_services)]
         for peer in peers:
             boot_pod(v1, pod_spec, service_spec, peer, peers)
 
@@ -106,20 +106,29 @@ def kill(args):
     """Kill selected peer"""
     v1 = init()
     pods = find_pods(v1)
-    peer = 'peer%d'%args.peer
+    peer = 'peer%d-%d'%(args.sg, args.peer)
     pod = list(filter(lambda i: i.metadata.name == peer, pods))
     if len(pod) != 1:
         sys.exit(1)
     shutdown_pod(v1, pod[0].metadata.name, pod[0].metadata.namespace)
+
+def kill_sg(args):
+    """Kill selected peer group"""
+    v1 = init()
+    pods = find_pods(v1)
+    peer = 'peer%d'%args.sg
+    pods = list(filter(lambda i: i.metadata.name.startswith(peer), pods))
+    for pod in pods:
+        shutdown_pod(v1, pod.metadata.name, pod.metadata.namespace)
 
 def launch(args):
     """Launch an individual peer"""
     v1 = init()
     pods = find_pods(v1)
     peers = list(map(lambda i: i.metadata.name, pods))
-    pod = "peer%d"%args.peer
+    pod = "peer%d-%d"%(args.sg, args.peer)
     if pod in peers:
-        print("%d is already running"%args.peer, out=sys.stderr)
+        print("%s is already running"%pod, out=sys.stderr)
         sys.exit(1)
     with open(os.path.join(sys.path[0], 'pod-template.yml')) as f:
         specs = list(yaml.load_all(f))
@@ -132,7 +141,7 @@ def get_service_url(args):
     v1 = init()
     ip = subprocess.run('minikube ip', check=True, stdout=subprocess.PIPE, shell=True).stdout\
             .decode('utf-8').strip()
-    svcs = get_service(v1, "peer%d"%args.peer)
+    svcs = get_service(v1, "peer%d-%d"%(args.sg, args.peer))
     if len(svcs.items) != 1:
         print("Could not find service", file=sys.stderr)
         sys.exit(1)
@@ -159,20 +168,28 @@ def main():
     list_parser.set_defaults(func = show)
 
     run_parser = subparsers.add_parser("boot")
+    run_parser.add_argument('sg', type=int, default=0, help='Server group')
     run_parser.add_argument('peers', type=int, default=3, help='How many peers?')
     run_parser.set_defaults(func = boot)
 
     kill_parser = subparsers.add_parser("kill")
+    kill_parser.add_argument('sg', type=int, default=0, help='Server group')
     kill_parser.add_argument('peer', type=int, help='Which peer should die')
-    kill_parser.set_defaults(func=kill)
+    kill_parser.set_defaults(func = kill)
+
+    kill_sg_parser = subparsers.add_parser("kill-sg")
+    kill_sg_parser.add_argument('sg', type=int, default=0, help='Server group')
+    kill_sg_parser.set_defaults(func = kill_sg)
     
     kill_parser = subparsers.add_parser("launch")
+    kill_parser.add_argument('sg', type=int, default=0, help='Server group')
     kill_parser.add_argument('peer', type=int, help='Which peer should be launched')
-    kill_parser.set_defaults(func=launch)
+    kill_parser.set_defaults(func = launch)
 
     svc_parser = subparsers.add_parser("client-url")
+    svc_parser.add_argument('sg', type=int, default=0, help='Server group')
     svc_parser.add_argument('peer', type=int, help="Which peer do you need URL for")
-    svc_parser.set_defaults(func=get_service_url)
+    svc_parser.set_defaults(func = get_service_url)
 
     args = parser.parse_args()
     args.func(args)

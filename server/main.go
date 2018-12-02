@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/raft/pb"
+	"github.com/sharded-raft/pb"
 	"google.golang.org/grpc"
 )
 
@@ -18,6 +18,7 @@ func main() {
 	var r *rand.Rand
 	var seed int64
 	var peers arrayPeers
+	var shardmaster arrayPeers
 	var clientPort int
 	var raftPort int
 	flag.Int64Var(&seed, "seed", -1,
@@ -27,6 +28,7 @@ func main() {
 	flag.IntVar(&raftPort, "raft", 3001,
 		"Port on which server should listen to Raft requests")
 	flag.Var(&peers, "peer", "A peer for this process")
+	flag.Var(&shardmaster, "sm", "A shard master server")
 	flag.Parse()
 
 	// Initialize the random number generator
@@ -59,7 +61,7 @@ func main() {
 
 	// Initialize KVStore
 	store := KVStore{C: make(chan InputChannelType), store: make(map[string]string)}
-	go serve(&store, r, &peers, id, raftPort)
+	go serve(&store, r, &peers, id, raftPort, &shardmaster)
 
 	// Tell GRPC that s will be serving requests for the KvStore service and should use store (defined on line 23)
 	// as the struct whose methods should be called in response.

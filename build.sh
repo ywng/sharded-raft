@@ -1,7 +1,13 @@
 #!/bin/sh
 set -E
 cd pb
+go fmt
 protoc --go_out=plugins=grpc:. kv.proto
+
+cd ../shardmaster
+go fmt
+go get -v ./...
+go build .
 
 cd ../server
 go fmt
@@ -18,5 +24,5 @@ cd ..
 
 launch-tool/launch.py shutdown
 launch-tool/launch.py list
-launch-tool/launch.py boot 3
+launch-tool/launch.py boot 0 3
 launch-tool/launch.py list
