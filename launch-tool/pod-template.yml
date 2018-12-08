@@ -9,13 +9,13 @@ spec:
   - name: sharded-raft-container
     image: local/sharded-raft-peer
     imagePullPolicy: Never
-    command: ['server', '-peer', 'peer1:3001']
+    command: ['server', '-peer', 'peer1:3001', '-sm', 'sm-peer1:3000', '-gid', '0']
     ports:
     - name: peer0-client
       containerPort: 3000
     - name: peer0-raft
       containerPort: 3001
-      
+
 ---
 apiVersion: v1
 kind: Service
@@ -33,3 +33,21 @@ spec:
     targetPort: peer0-raft
     name: raft-port
 
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: peer0
+  labels:
+    app: peer0
+spec:
+  containers:
+  - name: shard-master-container
+    image: local/shard-master-peer
+    imagePullPolicy: Never
+    command: ['shardmaster', '-peer', 'peer1:3001']
+    ports:
+    - name: peer0-client
+      containerPort: 3000
+    - name: peer0-raft
+      containerPort: 3001

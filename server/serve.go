@@ -86,6 +86,7 @@ func establishConnectionKvStore(endpoint string) pb.KvStoreClient {
 func getShardMasterRaftLeaderConnection(servers *pb.ServerList) pb.ShardMasterClient {
 	leaderEndpoint := getCurrentShardMasterLeaderByGetRequest(servers)
 	shardC := establishConnectionShardMaster(leaderEndpoint)
+	log.Printf("Connection to shard master leader established. %v", shardC)
 	return shardC
 }
 
@@ -160,6 +161,13 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 
 	//sharding
 	raft.shardMasterC = getShardMasterRaftLeaderConnection(&pb.ServerList{List: *shardMasterServers})
+	//shard config starts with a dummy invalid entry
+	var shardMapping []int64
+	dummyShardConfig := &pb.ShardConfig{Num: 0, ShardsGroupMap: &pb.ShardsMapping{Gids: shardMapping}}
+	for shardId := 0; shardId < NShards; shardId++ {
+		dummyShardConfig.ShardsGroupMap.Gids = append(dummyShardConfig.ShardsGroupMap.Gids, 0)
+	}
+	s.config = dummyShardConfig
 
 	serverList := peers.Clone()
 	serverList.Set(id) // the configuration should include the current server itself
@@ -191,6 +199,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 		case <-raft.electionTimer.C:
 			log.Printf("Election timeout: %s becomes a candidate requesting vote.", raft.me)
 
+			raft.mu.Lock()
 			//initialize vote info every time it becomes candidate
 			vote = raft.newVoteCounter()
 
@@ -201,15 +210,16 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 			// this also means within timeout period without receiving majority votes, split votes etc...
 			// it will trigger the election process again
 			restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+			raft.mu.Unlock()
+
 		/** client request handling **/
 		case op := <-s.C:
-			//raft.mu.Lock()
+			raft.mu.Lock()
 			//==> we don't take request during shard migration
-			if raft.state == leader && !raft.migrating {
+			//but we must accept shard config change commands
+			if raft.state == leader && (!raft.migrating || op.command.Operation == pb.Op_SHARD_CONFIG) {
 				index := raft.getLastLogIndex() + 1
 				log.Printf("Receive client request, command: %s, assignedIndex: %v.", op.command.Operation, index)
-
-				raft.mu.Lock()
 
 				if op.command.Operation == pb.Op_CONFIG_CHG {
 
@@ -251,23 +261,35 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 				}
 
 				raft.persist()
-				raft.mu.Unlock()
 
 				//instantly send append entry after receiving client request and added to leader's log
 				log.Printf("Trigger append entries request to peers immediately after receving the client request.")
 				raft.sendApeendEntries(raft.peerClients, appendResponseChan, snapshotResponseChan)
 
 				//log.Printf("raft.state: %d", raft.state)
+			} else if raft.migrating {
+				select {
+				case op.response <- pb.Result{Result: &pb.Result_Failure{Failure: &pb.Failure{Msg: "The raft server is doing shard migration, please wait for a short while."}}}:
+					log.Printf("The raft server is migrating shards, rejected client's kv requests.")
+				default:
+				}
 			} else {
 				//redirect result to send the client to the right leader
-				log.Printf("Peer %s is not leader, redirecting client request to leader %s.", raft.me, raft.leader)
-				op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: strings.Split(raft.leader, ":")[0]}}}
+				//use select to do non-blocking on the channel
+				select {
+				case op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: strings.Split(raft.leader, ":")[0]}}}:
+					log.Printf("Peer %s is not leader, redirecting client request to leader %s.", raft.me, raft.leader)
+				default:
+				}
+
 			}
-			//raft.mu.Unlock()
+
+			raft.mu.Unlock()
 
 		/** send heartbeats to followers to maintain authority **/
 		case <-raft.heartBeatTimer.C:
 			log.Printf("Heartbeat timeout ...")
+			raft.mu.Lock()
 
 			//log.Printf("raft.state: %d", raft.state)
 
@@ -276,6 +298,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 			raft.sendApeendEntries(raft.peerClients, appendResponseChan, snapshotResponseChan)
 
 			restartTimer(raft.heartBeatTimer, HEARTBEAT_TIMEOUT*time.Millisecond)
+
+			raft.mu.Unlock()
 
 		/** handle append entry request from other raft peers **/
 		case ae := <-raft.AppendChan:
@@ -375,7 +399,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 								raft.updateQuorumSize()
 							}
 
-							log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Cmd.Operation)
+							//log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Cmd.Operation)
 						}
 					}
 				}
@@ -393,13 +417,14 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 				//received AppendEntries RPC from current leader, restart election timer
 				if res.Success {
 					restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+					//log.Printf("Election timeout timer reset.")
 				}
 
 				raft.persist()
 			}
 
-			raft.mu.Unlock()
 			ae.response <- res
+			raft.mu.Unlock()
 
 		/** handle vote request from other raft peers **/
 		case vreq := <-raft.VoteChan:
@@ -459,8 +484,8 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 				}
 			}
 
-			raft.mu.Unlock()
 			vreq.response <- resp
+			raft.mu.Unlock()
 
 		/** handle install snapshot request from other raft peers **/
 		case installSnapshotReq := <-raft.InstallSnapshotChan:
@@ -616,7 +641,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 						raft.nextIndex[ar.peer] = max(raft.nextIndex[ar.peer], ar.matchIndex+1)
 						raft.matchIndex[ar.peer] = max(raft.matchIndex[ar.peer], ar.matchIndex)
 						n := raft.matchIndex[ar.peer]
-						log.Printf("peer: %s, peer_matchIndex: %d, peer_nextIndex: %d, leaderCommitIndex: %d.",
+						//log.Printf("peer: %s, peer_matchIndex: %d, peer_nextIndex: %d, leaderCommitIndex: %d.",
 							ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)
 						//the matched index is beyond leader's commitIndex and it is in leader's current term (Figure 8 in the paper)
 						//if majority is reached, it is safe to commit that matchedIndex
@@ -628,14 +653,14 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 								matchCount = int64(1)
 							}
 
-							log.Printf("entry: %s.", entry)
+							//log.Printf("entry: %s.", entry)
 							for _, peer := range *raft.getServerList() {
 								if raft.matchIndex[peer] >= n {
 									matchCount++
 								}
 							}
 
-							log.Printf("matchCount: %d, quorumSize: %d.", matchCount, raft.quorumSize)
+							//log.Printf("matchCount: %d, quorumSize: %d.", matchCount, raft.quorumSize)
 							if matchCount >= raft.quorumSize {
 								raft.commitIndex = n
 								//apply to state machine
@@ -704,22 +729,53 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 
 		/** periodically query the shard config from Shard Master **/
 		case <-raft.shardQueryTimer.C:
-			newConfigRes, _ := raft.shardMasterC.Query(context.Background(), &pb.QueryArgs{Num: s.config.Num + 1})
-			maxConfigRes, _ := raft.shardMasterC.Query(context.Background(), &pb.QueryArgs{Num: -1})
-			newConfig := newConfigRes.GetConfig()
-			maxConfig := maxConfigRes.GetConfig()
+			//only leader will query the shard config, and add it to raft concensus if a new shard config is found
+			//when it is replicated and committed, other peer will also get the new shard config
+			if raft.state == leader {
+				//in go rountine to make request shard master
+				//so it doesn't block the raft main loop logic
+				go func(smc pb.ShardMasterClient, raft Raft, s *KVStore) {
+					newConfigRes, err1 := smc.Query(context.Background(), &pb.QueryArgs{Num: s.config.Num + 1})
+					maxConfigRes, err2 := smc.Query(context.Background(), &pb.QueryArgs{Num: -1})
 
-			newConfig.MaxConfigNum = maxConfig.Num
-			s.mu.Lock()
-			if newConfig.Num > s.config.Num {
-				s.mu.Unlock()
-				shardConfigCmd := &pb.Command{Operation: pb.Op_SHARD_CONFIG, Arg: &pb.Command_ShardConfig{ShardConfig: newConfig}}
-				index := raft.getLastLogIndex() + 1
-				raft.addLogEntry(&pb.Entry{Term: raft.currentTerm, Index: index, Cmd: shardConfigCmd})
-			} else {
-				s.mu.Unlock()
+					if err1 != nil || err2 != nil {
+						log.Printf("Shard master calls error, err1: %v, err2: %v", err1, err2)
+						return
+					}
+
+					skip := false
+					switch newConfigRes.Result.(type) {
+					case *pb.Result_Redirect:
+						log.Printf("The shard master leader has changed, new leader: %v", newConfigRes.GetRedirect().Server)
+						raft.shardMasterC = getShardMasterRaftLeaderConnection(&pb.ServerList{List: *shardMasterServers})
+						skip = true
+					default:
+					}
+
+					if skip {
+						return
+					}
+
+					newConfig := newConfigRes.GetConfig()
+					maxConfig := maxConfigRes.GetConfig()
+
+					newConfig.MaxConfigNum = maxConfig.Num
+
+					//log.Printf("Query config from shard master: %v", newConfig)
+					s.mu.Lock()
+					if newConfig.Num > s.config.Num {
+						shardConfigCmd := pb.Command{Operation: pb.Op_SHARD_CONFIG, Arg: &pb.Command_ShardConfig{ShardConfig: newConfig}}
+						s.C <- InputChannelType{command: shardConfigCmd, response: nil}
+						s.mu.Unlock()
+						log.Printf("Received new shard config from shard master: %v", newConfig)
+					} else {
+						log.Printf("Received old shard config from shard master, current config num: %v, recieved config num: %v", newConfig.Num, s.config.Num)
+						s.mu.Unlock()
+					}
+				}(raft.shardMasterC, raft, s)
+
+				restartTimer(raft.shardQueryTimer, SHARD_QUERY_TIMEOUT*time.Millisecond)
 			}
-			restartTimer(raft.shardQueryTimer, SHARD_QUERY_TIMEOUT*time.Millisecond)
 
 		/** the server should be shut down **/
 		case <-raft.killServer:

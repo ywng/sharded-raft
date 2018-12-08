@@ -14,7 +14,7 @@ go fmt
 go get -v ./...
 go build .
 
-cd ../client
+cd ../sharded-raft-test-client
 go fmt
 go get -v ./...
 go build .
@@ -23,6 +23,6 @@ cd ..
 ./create-docker-image.sh
 
 launch-tool/launch.py shutdown
+launch-tool/launch.py shutdown-sm
 launch-tool/launch.py list
-launch-tool/launch.py boot 0 3
-launch-tool/launch.py list
+launch-tool/launch.py list-sm

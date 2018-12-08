@@ -23,10 +23,10 @@ const (
 	//shutdown  = 4
 
 	//different timeout in ms
-	ELECTION_TIMEOUT_LOWER_BOUND = 1000
-	ELECTION_TIMEOUT_UPPER_BOUND = 4000
+	ELECTION_TIMEOUT_LOWER_BOUND = 2000
+	ELECTION_TIMEOUT_UPPER_BOUND = 5000
 	HEARTBEAT_TIMEOUT            = 500
-	SHARD_QUERY_TIMEOUT          = 100
+	SHARD_QUERY_TIMEOUT          = 500
 	LOG_COMPACTION_LIMIT         = 300 //-1 means no log compaction
 )
 
@@ -446,9 +446,6 @@ func (r *Raft) ProcessLogs(s *KVStore) {
 
 // this is used to construct and send a vote request to all peers
 func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteResponseChan chan VoteResponse) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	r.state = candidate
 	r.currentTerm++
 	r.votedFor = r.me
@@ -479,9 +476,6 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 
 // this is used to construct and send an append entry request to all peers
 func (r *Raft) sendApeendEntries(peerClients map[string]pb.RaftClient, appendResponseChan chan AppendResponse, snapshotResponseChan chan InstallSnapshotResponse) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	for p, c := range peerClients {
 		r.sendApeendEntriesTo(p, c, appendResponseChan, snapshotResponseChan)
 	}

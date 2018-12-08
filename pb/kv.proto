@@ -47,14 +47,21 @@ message Redirect {
     string server = 1;
 }
 
+// Wrong shard group, redirect to the right shard group or 
+// client can query the shard master for latest config
+message ErrWrongGroup {
+    ShardConfig config = 1;
+}
+
 // Represents an operation result.
 message Result {
     oneof result {
         Redirect redirect = 1;
         KeyValue kv = 2;
         Success s = 3;
-        Failure failure = 4;
-        ShardConfig config = 5;
+        ErrWrongGroup wrongG = 4;
+        Failure failure = 5;
+        ShardConfig config = 6;
     }
 }
 

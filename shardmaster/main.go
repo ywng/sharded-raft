@@ -44,7 +44,7 @@ func main() {
 	}
 
 	id := fmt.Sprintf("%s:%d", name, raftPort)
-	log.Printf("Starting peer with ID %s", id)
+	log.Printf("Starting shard-master peer with ID %s", id)
 
 	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", clientPort)

@@ -1,0 +1,10 @@
+{:process 119, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 68, :type :invoke, :f :set, :key "test_leader_failure", :value "2"}
+{:process 75, :type :invoke, :f :set, :key "nyu", :value "New New York University"}
+{:process 93, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 86, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 116, :type :invoke, :f :get, :key "nyu", :value nil}
+{:process 89, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}
+{:process 130, :type :invoke, :f :set, :key "test_f_nodes_failure", :value "9"}
+{:process 103, :type :invoke, :f :get, :key "OOP", :value nil}
+{:process 62, :type :invoke, :f :get, :key "test_f_nodes_failure", :value nil}

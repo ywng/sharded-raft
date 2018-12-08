@@ -48,10 +48,13 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 	snapshotResponseChan := make(chan InstallSnapshotResponse)
 
 	//sm server starts with a dummy invalid entry
-	dummyShardConfig := &pb.ShardConfig{Num: 0}
+	var shardMapping []int64
+	dummyShardConfig := &pb.ShardConfig{Num: 0, ShardsGroupMap: &pb.ShardsMapping{Gids: shardMapping}}
 	for shardId := 0; shardId < NShards; shardId++ {
-		dummyShardConfig.ShardsGroupMap.Gids[shardId] = 0
+		dummyShardConfig.ShardsGroupMap.Gids = append(dummyShardConfig.ShardsGroupMap.Gids, 0)
 	}
+	serverMap := make(map[int64]*pb.ServerList)
+	dummyShardConfig.Servers = &pb.GroupServersMap{Map: serverMap}
 	sm.configs = append(sm.configs, dummyShardConfig)
 
 	raft.mu.Lock()

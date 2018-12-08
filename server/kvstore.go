@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"log"
 	"sync"
+	"time"
 
 	context "golang.org/x/net/context"
 
@@ -55,9 +56,12 @@ func (s *KVStore) Get(ctx context.Context, key *pb.Key) (*pb.Result, error) {
 	// Send request over the channel
 	s.C <- InputChannelType{command: r, response: c}
 	//log.Printf("Waiting for get response")
-	result := <-c
-	// The bit below works because Go maps return the 0 value for non existent keys, which is empty in this case.
-	return &result, nil
+	select {
+	case result := <-c:
+		return &result, nil
+	case <-time.After(5 * time.Second):
+		return &pb.Result{Result: &pb.Result_Failure{Failure: &pb.Failure{Msg: "Request timeout."}}}, nil
+	}
 }
 
 func (s *KVStore) Set(ctx context.Context, in *pb.KeyValue) (*pb.Result, error) {
@@ -68,9 +72,12 @@ func (s *KVStore) Set(ctx context.Context, in *pb.KeyValue) (*pb.Result, error) 
 	// Send request over the channel
 	s.C <- InputChannelType{command: r, response: c}
 	//log.Printf("Waiting for set response")
-	result := <-c
-	// The bit below works because Go maps return the 0 value for non existent keys, which is empty in this case.
-	return &result, nil
+	select {
+	case result := <-c:
+		return &result, nil
+	case <-time.After(5 * time.Second):
+		return &pb.Result{Result: &pb.Result_Failure{Failure: &pb.Failure{Msg: "Request timeout."}}}, nil
+	}
 }
 
 func (s *KVStore) Clear(ctx context.Context, in *pb.Empty) (*pb.Result, error) {
@@ -81,9 +88,12 @@ func (s *KVStore) Clear(ctx context.Context, in *pb.Empty) (*pb.Result, error) {
 	// Send request over the channel
 	s.C <- InputChannelType{command: r, response: c}
 	//log.Printf("Waiting for clear response")
-	result := <-c
-	// The bit below works because Go maps return the 0 value for non existent keys, which is empty in this case.
-	return &result, nil
+	select {
+	case result := <-c:
+		return &result, nil
+	case <-time.After(5 * time.Second):
+		return &pb.Result{Result: &pb.Result_Failure{Failure: &pb.Failure{Msg: "Request timeout."}}}, nil
+	}
 }
 
 func (s *KVStore) CAS(ctx context.Context, in *pb.CASArg) (*pb.Result, error) {
@@ -94,9 +104,12 @@ func (s *KVStore) CAS(ctx context.Context, in *pb.CASArg) (*pb.Result, error) {
 	// Send request over the channel
 	s.C <- InputChannelType{command: r, response: c}
 	//log.Printf("Waiting for CAS response")
-	result := <-c
-	// The bit below works because Go maps return the 0 value for non existent keys, which is empty in this case.
-	return &result, nil
+	select {
+	case result := <-c:
+		return &result, nil
+	case <-time.After(5 * time.Second):
+		return &pb.Result{Result: &pb.Result_Failure{Failure: &pb.Failure{Msg: "Request timeout."}}}, nil
+	}
 }
 
 func (s *KVStore) ChangeConfiguration(ctx context.Context, in *pb.Servers) (*pb.Result, error) {
@@ -115,6 +128,9 @@ func (s *KVStore) ChangeConfiguration(ctx context.Context, in *pb.Servers) (*pb.
 // Used internally to generate a result for a get request. This function assumes that it is called from a single thread of
 // execution, and hence does not handle races.
 func (s *KVStore) GetInternal(k string) pb.Result {
+	if s.config.ShardsGroupMap.Gids[key2shard(k)] != s.gid {
+		return pb.Result{Result: &pb.Result_WrongG{WrongG: &pb.ErrWrongGroup{Config: s.config}}}
+	}
 	v := s.store[k]
 	return pb.Result{Result: &pb.Result_Kv{Kv: &pb.KeyValue{Key: k, Value: v}}}
 }
@@ -122,6 +138,9 @@ func (s *KVStore) GetInternal(k string) pb.Result {
 // Used internally to set and generate an appropriate result. This function assumes that it is called from a single
 // thread of execution and hence does not handle race conditions.
 func (s *KVStore) SetInternal(k string, v string) pb.Result {
+	if s.config.ShardsGroupMap.Gids[key2shard(k)] != s.gid {
+		return pb.Result{Result: &pb.Result_WrongG{WrongG: &pb.ErrWrongGroup{Config: s.config}}}
+	}
 	s.store[k] = v
 	return pb.Result{Result: &pb.Result_Kv{Kv: &pb.KeyValue{Key: k, Value: v}}}
 }
@@ -134,6 +153,9 @@ func (s *KVStore) ClearInternal() pb.Result {
 
 // Used internally this function performs CAS assuming no races.
 func (s *KVStore) CasInternal(k string, v string, vn string) pb.Result {
+	if s.config.ShardsGroupMap.Gids[key2shard(k)] != s.gid {
+		return pb.Result{Result: &pb.Result_WrongG{WrongG: &pb.ErrWrongGroup{Config: s.config}}}
+	}
 	vc := s.store[k]
 	if vc == v {
 		s.store[k] = vn
@@ -186,39 +208,50 @@ func (s *KVStore) HandleCommand(op InputChannelType, raft *Raft) {
 				s.migrateReceive[shard] = false
 			}
 		}
-		raft.migrating = true
 		s.mu.Unlock()
-		migrateOk := false
-		for !migrateOk {
-			migrateOk = true
-			for shard, ok := range s.migrateReceive {
-				if !ok {
-					migrateOk = false
+
+		raft.migrating = true
+		migrateDone := false
+		for !migrateDone {
+			migrateDone = true
+			for shard, done := range s.migrateReceive {
+				if !done {
+					migrateDone = false
 					args := &pb.ShardMigrationArgs{Shard: int64(shard), ConfigNum: newConfig.Num}
 					gidOfShard := s.config.ShardsGroupMap.Gids[shard]
+					log.Printf("shard: %v, gidOfShard: %v", shard, gidOfShard)
+					//we probably need to make this time consuming part as go routine
+					//so as not to block the raft main logic,
+					//otherwise peer might timeout for election...
 					for _, server := range s.config.Servers.Map[gidOfShard].List {
 						kvc := establishConnectionKvStore(server)
 						res, err := kvc.ShardMigration(context.Background(), args)
 						if err == nil && res.Success {
+							log.Printf("Received migrated data from: %v, res: %v", server, res)
 							s.mu.Lock()
 							if s.migrateReceive[shard] == false {
 								for k, v := range res.MigStore {
 									s.store[k] = v
 								}
-
 								s.migrateReceive[shard] = true
 							}
 							s.mu.Unlock()
 							break
+						} else if err != nil {
+							log.Fatalf("Error when fetching migrated data from: %v, error: %v, res: %v", server, err, res)
+						} else {
+							log.Printf("Error when fetching migrated data from: %v, res: %v, success: %v, new config num: %v, max config num: %v",
+								server, res, res.Success, newConfig.Num, newConfig.MaxConfigNum)
 						}
 					}
 				}
 			}
 		}
-		s.mu.Lock()
 		if newConfig.Num == newConfig.MaxConfigNum {
 			raft.migrating = false
 		}
+		log.Printf("Done migration: %v, current config num: %v, max config num: %v", !raft.migrating, newConfig.Num, newConfig.MaxConfigNum)
+		s.mu.Lock()
 		s.config = newConfig
 		s.mu.Unlock()
 

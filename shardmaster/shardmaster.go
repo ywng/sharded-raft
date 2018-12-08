@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"log"
+	"sort"
 
 	context "golang.org/x/net/context"
 
@@ -70,10 +71,17 @@ func (sm *ShardMaster) ChangeConfiguration(ctx context.Context, in *pb.Servers) 
 // execution, and hence does not handle races.
 func (sm *ShardMaster) JoinInternal(args *pb.JoinArgs) pb.Result {
 	newConfig := sm.CreateNewConfigFromLastest()
+	log.Printf("Join args: %v", args)
 
 	//newly added gids -> servers from the request
-	for k, v := range args.Servers.Map {
-		newConfig.Servers.Map[k] = v
+	//this is to make the map key iteration in order across servers
+	var joinGidKeys []int64
+	for key := range args.Servers.Map {
+		joinGidKeys = append(joinGidKeys, key)
+	}
+	sort.Slice(joinGidKeys, func(i, j int) bool { return joinGidKeys[i] < joinGidKeys[j] })
+	for _, k := range joinGidKeys {
+		newConfig.Servers.Map[k] = args.Servers.Map[k]
 		average := float64(NShards) / float64(len(newConfig.Servers.Map))
 		if len(newConfig.Servers.Map) == 1 {
 			for shardId := range newConfig.ShardsGroupMap.Gids {
@@ -89,7 +97,14 @@ func (sm *ShardMaster) JoinInternal(args *pb.JoinArgs) pb.Result {
 				}
 				min := int64(257)
 				max := int64(0)
-				for gid := range newConfig.Servers.Map {
+
+				//this is to make the map key iteration in order across servers
+				var gidKeys []int64
+				for key := range newConfig.Servers.Map {
+					gidKeys = append(gidKeys, key)
+				}
+				sort.Slice(gidKeys, func(i, j int) bool { return gidKeys[i] < gidKeys[j] })
+				for _, gid := range gidKeys {
 					if counts[gid] > max {
 						max = counts[gid]
 						maxGroup = gid
@@ -113,7 +128,7 @@ func (sm *ShardMaster) JoinInternal(args *pb.JoinArgs) pb.Result {
 		}
 	}
 
-	sm.configs = append(sm.configs, &newConfig)
+	sm.configs = append(sm.configs, newConfig)
 	return pb.Result{Result: &pb.Result_S{S: &pb.Success{}}}
 }
 
@@ -137,7 +152,14 @@ func (sm *ShardMaster) LeaveInternal(args *pb.LeaveArgs) pb.Result {
 			}
 			min := int64(257)
 			max := int64(0)
-			for gid := range newConfig.Servers.Map {
+
+			//this is to make the map key iteration in order across servers
+			var gidKeys []int64
+			for key := range newConfig.Servers.Map {
+				gidKeys = append(gidKeys, key)
+			}
+			sort.Slice(gidKeys, func(i, j int) bool { return gidKeys[i] < gidKeys[j] })
+			for _, gid := range gidKeys {
 				if counts[gid] > max {
 					max = counts[gid]
 					maxGroup = gid
@@ -173,15 +195,16 @@ func (sm *ShardMaster) LeaveInternal(args *pb.LeaveArgs) pb.Result {
 		}
 	}
 
-	sm.configs = append(sm.configs, &newConfig)
+	sm.configs = append(sm.configs, newConfig)
 	return pb.Result{Result: &pb.Result_S{S: &pb.Success{}}}
 }
 
 func (sm *ShardMaster) MoveInternal(args *pb.MoveArgs) pb.Result {
+	log.Printf("Move args, shard: %v, gid: %v", args.Shard, args.Gid)
 	newConfig := sm.CreateNewConfigFromLastest()
 
 	newConfig.ShardsGroupMap.Gids[args.Shard] = args.Gid
-	sm.configs = append(sm.configs, &newConfig)
+	sm.configs = append(sm.configs, newConfig)
 	return pb.Result{Result: &pb.Result_S{S: &pb.Success{}}}
 }
 
@@ -238,15 +261,11 @@ func (sm *ShardMaster) ApplySnapshot(snapshot []byte) {
 	decoder.Decode(&sm.configs)
 }
 
-func (sm *ShardMaster) CreateNewConfigFromLastest() pb.ShardConfig {
+func (sm *ShardMaster) CreateNewConfigFromLastest() *pb.ShardConfig {
 	nextIndex := int64(len(sm.configs))
-	newConfig := pb.ShardConfig{Num: nextIndex, ShardsGroupMap: sm.configs[nextIndex-1].ShardsGroupMap}
-	newConfig.Servers = &pb.GroupServersMap{Map: make(map[int64]*pb.ServerList)}
-
-	//copy what prev config gids -> servers
-	for k, v := range sm.configs[nextIndex-1].Servers.Map {
-		newConfig.Servers.Map[k] = v
-	}
+	//if it is not deep copy, will have problem when several changes e.g. MOVE shard req come
+	newConfig := ShardConfigClone(sm.configs[nextIndex-1])
+	newConfig.Num = nextIndex
 
 	return newConfig
 }
@@ -259,4 +278,22 @@ func MoveShard(shard *pb.ShardsMapping, src int64, dst int64) {
 			return
 		}
 	}
+}
+
+//deep copy of a shard config obj
+func ShardConfigClone(config *pb.ShardConfig) *pb.ShardConfig {
+	newConfig := &pb.ShardConfig{}
+	newConfig.Servers = &pb.GroupServersMap{Map: make(map[int64]*pb.ServerList)}
+	//copy what prev config gids -> servers
+	for k, v := range config.Servers.Map {
+		newConfig.Servers.Map[k] = v
+	}
+
+	var shardMapping []int64
+	newConfig.ShardsGroupMap = &pb.ShardsMapping{Gids: shardMapping}
+	for _, gid := range config.ShardsGroupMap.Gids {
+		newConfig.ShardsGroupMap.Gids = append(newConfig.ShardsGroupMap.Gids, gid)
+	}
+
+	return newConfig
 }
