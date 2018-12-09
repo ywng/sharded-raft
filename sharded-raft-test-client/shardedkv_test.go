@@ -396,7 +396,7 @@ func prepareFreshShardMaster(t *testing.T, numRaftServers int) {
 	failAllShardMasterRaftServer(t)
 	time.Sleep(30 * time.Second)
 	bootShardMasterServerGroup(t, numRaftServers)
-	time.Sleep(40 * time.Second)
+	time.Sleep(30 * time.Second)
 }
 
 func prepareSeverGroupForTest(t *testing.T, fromG int, toG int, numRaftServers int, numShardMasterServers int) {
@@ -426,7 +426,7 @@ func fireSetRequestsToShardedKVStore(t *testing.T, keys []string, values []strin
 		gid := config.ShardsGroupMap.Gids[shard]
 		t.Logf("Setting key, key: %v, shard: %v, gid: %v", key, shard, gid)
 
-		retry := true 
+		retry := true
 		for retry {
 			var kvc pb.KvStoreClient
 			if leaderMap == nil {
@@ -444,7 +444,7 @@ func fireSetRequestsToShardedKVStore(t *testing.T, keys []string, values []strin
 				retry = false
 			}
 		}
-		
+
 	}
 }
 
@@ -453,8 +453,8 @@ func fireGetRequestsToShardedKVStore(t *testing.T, keys []string, values []strin
 		shard := key2shard(key)
 		gid := config.ShardsGroupMap.Gids[shard]
 		t.Logf("Retriving key, key: %v, shard: %v, gid: %v", key, shard, gid)
-		
-		retry := true 
+
+		retry := true
 		for retry {
 			var kvc pb.KvStoreClient
 			if leaderMap == nil {
@@ -497,7 +497,7 @@ func fireCasRequestsToShardedKVStore(t *testing.T, keys []string, values []strin
 		gid := config.ShardsGroupMap.Gids[shard]
 		t.Logf("CAS set key, key: %v, shard: %v, gid: %v", key, shard, gid)
 
-		retry := true 
+		retry := true
 		for retry {
 			var kvc pb.KvStoreClient
 			if leaderMap == nil {
@@ -505,7 +505,7 @@ func fireCasRequestsToShardedKVStore(t *testing.T, keys []string, values []strin
 			} else {
 				kvc = leaderMap[gid]
 			}
-			res := 	fireCasRequest(t, kvc, key, values[i], expectedVal[i], oldValues[i], w, verify)
+			res := fireCasRequest(t, kvc, key, values[i], expectedVal[i], oldValues[i], w, verify)
 			switch res.Result.(type) {
 			case *pb.Result_Failure:
 				retry = true
@@ -949,7 +949,7 @@ func TestConcurrentGetSetCas(t *testing.T) {
 	config, _ := prepareShardMasterAndServerGroups(t, numGroups, NUM_RAFT_SERVERS)
 
 	leaderMap := make(map[int64]pb.KvStoreClient)
-	for gid:=0; gid<numGroups; gid++ {
+	for gid := 0; gid < numGroups; gid++ {
 		_, leaderMap[int64(gid)] = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
 	}
 
@@ -1044,7 +1044,7 @@ func TestHighConcurrentContention(t *testing.T) {
 	config, _ := prepareShardMasterAndServerGroups(t, numGroups, NUM_RAFT_SERVERS)
 
 	leaderMap := make(map[int64]pb.KvStoreClient)
-	for gid:=0; gid<numGroups; gid++ {
+	for gid := 0; gid < numGroups; gid++ {
 		_, leaderMap[int64(gid)] = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
 	}
 
@@ -1123,7 +1123,7 @@ func TestFailedNodesCanRejoinSuccesfullyAfterLogCompaction(t *testing.T) {
 	config, _ := prepareShardMasterAndServerGroups(t, numGroups, numRaftServers)
 
 	leaderMap := make(map[int64]pb.KvStoreClient)
-	for gid:=0; gid<numGroups; gid++ {
+	for gid := 0; gid < numGroups; gid++ {
 		_, leaderMap[int64(gid)] = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
 	}
 
@@ -1205,7 +1205,6 @@ func TestFailedNodesCanRejoinSuccesfullyAfterLogCompaction(t *testing.T) {
 	valuesAdditional := []string{"world", "is a name", "New York University", "is fun?"}
 	fireSetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil, nil)
 
-
 	//relaunch some nodes
 	for i := 0; i < numGroups; i++ {
 		relaunchGivenRaftServer(t, strconv.Itoa(i), "0", numRaftServers, numRaftServers)
@@ -1219,7 +1218,97 @@ func TestFailedNodesCanRejoinSuccesfullyAfterLogCompaction(t *testing.T) {
 	severGroupTearDown(t, 0, numGroups-1)
 }
 
-
-
-
 //******** Regression: Membership Changes Test Cases ********//
+//since the membership change of sharded kv-store group will involve the change of config in ShardMaster
+//it is not implemented.
+//we will test the membership changes with the raft servers in shard master.
+func TestMembershipChangeAddServer(t *testing.T) {
+	numRaftServers := 3
+	prepareFreshShardMaster(t, numRaftServers)
+
+	servers := listAvailShardMasterRaftServer(t)
+	t.Logf("servers: %v", servers)
+	currList := ""
+	for _, server := range servers {
+		currList += "sm-peer" + server + ":3001,"
+	}
+
+	relaunchGivenShardMasterRaftServer(t, strconv.Itoa(len(servers)))
+	relaunchGivenShardMasterRaftServer(t, strconv.Itoa(len(servers)+1))
+	new_servers := listAvailShardMasterRaftServer(t)
+	newList := ""
+	for _, server := range new_servers {
+		newList += "sm-peer" + server + ":3001,"
+	}
+
+	req := &pb.Servers{CurrList: currList[:len(currList)-1], NewList: newList[:len(newList)-1]}
+	t.Logf("membership change req: %v", req)
+	_, smc := getConnectionToShardMasterRaftLeader(t)
+
+	fireMembershipChangeRequest(t, smc, req)
+
+	time.Sleep(20 * time.Second)
+	moveArgs := &pb.MoveArgs{Shard: 0, Gid: 2}
+	fireMoveRequest(t, smc, moveArgs)
+
+	fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
+}
+
+func TestMembershipChangeRemoveNonLeaderServer(t *testing.T) {
+	numRaftServers := 5
+	prepareFreshShardMaster(t, numRaftServers)
+
+	servers := listAvailShardMasterRaftServer(t)
+	currList := ""
+	for _, server := range servers {
+		currList += "sm-peer" + server + ":3001,"
+	}
+
+	newList := ""
+	for i, server := range servers {
+		if i < len(servers)-2 {
+			newList += "sm-peer" + server + ":3001,"
+		}
+	}
+
+	req := &pb.Servers{CurrList: currList[:len(currList)-1], NewList: newList[:len(newList)-1]}
+	_, smc := getConnectionToShardMasterRaftLeader(t)
+
+	fireMembershipChangeRequest(t, smc, req)
+
+	time.Sleep(20 * time.Second)
+	moveArgs := &pb.MoveArgs{Shard: 0, Gid: 2}
+	fireMoveRequest(t, smc, moveArgs)
+
+	fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
+}
+
+func TestMembershipChangeRemoveLeaderServer(t *testing.T) {
+	numRaftServers := 5
+	prepareFreshShardMaster(t, numRaftServers)
+
+	servers := listAvailShardMasterRaftServer(t)
+	currList := ""
+	for _, server := range servers {
+		currList += "sm-peer" + server + ":3001,"
+	}
+
+	leaderId := getCurrentShardMasterLeaderIDByQueryRequest(t)
+	newList := ""
+	for _, server := range servers {
+		if !(server == leaderId) {
+			newList += "sm-peer" + server + ":3001,"
+		}
+	}
+
+	req := &pb.Servers{CurrList: currList[:len(currList)-1], NewList: newList[:len(newList)-1]}
+	_, smc := getConnectionToShardMasterRaftLeader(t)
+
+	fireMembershipChangeRequest(t, smc, req)
+
+	time.Sleep(20 * time.Second)
+	moveArgs := &pb.MoveArgs{Shard: 0, Gid: 2}
+	fireMoveRequest(t, smc, moveArgs)
+
+	fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
+}

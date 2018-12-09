@@ -57,7 +57,7 @@ func getShardMasterServiceURL(t *testing.T, peerNum string) string {
 	cmd := exec.Command("../launch-tool/launch.py", "sm-client-url", peerNum)
 	stdout, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("Cannot get the service URL.")
+		t.Fatalf("Cannot get the service URL, peerNum: %v", peerNum)
 	}
 	endpoint := strings.Trim(string(stdout), "\n")
 	return endpoint
@@ -97,7 +97,7 @@ func relaunchGivenShardMasterRaftServer(t *testing.T, peerNum string) {
 	cmd := exec.Command("../launch-tool/launch.py", "launch-sm", peerNum)
 	stdout, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("Cannot re-launch given peer server.")
+		t.Fatalf("Cannot re-launch given peer server, peerNum: %v", peerNum)
 	}
 	t.Logf(string(stdout))
 }
@@ -180,6 +180,15 @@ func fireLeaveRequest(t *testing.T, smc pb.ShardMasterClient, req *pb.LeaveArgs)
 
 func fireMoveRequest(t *testing.T, smc pb.ShardMasterClient, req *pb.MoveArgs) {
 	res, err := smc.Move(context.Background(), req)
+	if err != nil {
+		t.Logf("Request error %v", err)
+	}
+
+	t.Logf("Got response: %v", res)
+}
+
+func fireMembershipChangeRequest(t *testing.T, smc pb.ShardMasterClient, req *pb.Servers) {
+	res, err := smc.ChangeConfiguration(context.Background(), req)
 	if err != nil {
 		t.Logf("Request error %v", err)
 	}
