@@ -244,10 +244,10 @@ func (sm *ShardMaster) HandleCommand(op InputChannelType) {
 	//use select to do non-blocking send
 	select {
 	case op.response <- result:
-		log.Printf("shard-master-store command completed and response is sent to client.")
+		//log.Printf("shard-master-store command completed and response is sent to client.")
 	default:
 		//no response is sent when non-leader is handling the command
-		log.Printf("shard-master-store command completed and no response is sent to client.")
+		//log.Printf("shard-master-store command completed and no response is sent to client.")
 	}
 
 	if unrecognizedOp {

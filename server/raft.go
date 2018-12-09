@@ -23,11 +23,11 @@ const (
 	//shutdown  = 4
 
 	//different timeout in ms
-	ELECTION_TIMEOUT_LOWER_BOUND = 2000
-	ELECTION_TIMEOUT_UPPER_BOUND = 5000
+	ELECTION_TIMEOUT_LOWER_BOUND = 4000
+	ELECTION_TIMEOUT_UPPER_BOUND = 7000
 	HEARTBEAT_TIMEOUT            = 500
-	SHARD_QUERY_TIMEOUT          = 500
-	LOG_COMPACTION_LIMIT         = 300 //-1 means no log compaction
+	SHARD_QUERY_TIMEOUT          = 1500
+	LOG_COMPACTION_LIMIT         = 30 //-1 means no log compaction
 )
 
 type voteInfo struct {

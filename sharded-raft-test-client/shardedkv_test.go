@@ -57,6 +57,7 @@ func (lw *LockedWriter) Write(str string) (n int, err error) {
 
 func getKVConnectionToRaftLeader(t *testing.T, sg string) (string, pb.KvStoreClient) {
 	leaderId := getCurrentLeaderIDByGetRequest(t, sg)
+	t.Logf("sg: %v, leader id: %v", sg, leaderId)
 	endpoint := getKVServiceURL(t, sg, leaderId)
 	kvc := establishConnection(t, endpoint)
 	return leaderId, kvc
@@ -181,6 +182,7 @@ func getCurrentLeaderIDByGetRequest(t *testing.T, sg string) string {
 			sg = re.FindAllString(serverName, -1)[0]
 			leaderId = re.FindAllString(serverName, -1)[1]
 			endpoint = getKVServiceURL(t, sg, leaderId)
+			t.Logf("redirected sever name: %v, sg extracted: %v, leaderId extracted: %v", serverName, sg, leaderId)
 		}
 		time.Sleep(1 * time.Second)
 	}
@@ -198,8 +200,11 @@ func fireGetRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string, 
 	if err != nil {
 		t.Logf("Request error %v", err)
 	}
-
 	t.Logf("Got response: %v", res)
+
+	if res.GetFailure() != nil || res.GetRedirect() != nil {
+		return res
+	}
 
 	if toVerify && (res.GetKv().Key != key || res.GetKv().Value != val) {
 		t.Fatalf("We fail to get back what we expect.")
@@ -228,6 +233,10 @@ func fireSetRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string, 
 		t.Fatalf("Error while setting a key. err: %v", err)
 	}
 	t.Logf("Got response: %v", res)
+
+	if res.GetFailure() != nil || res.GetRedirect() != nil {
+		return res
+	}
 
 	if toVerify && (res.GetKv().Key != key || res.GetKv().Value != val) {
 		t.Fatalf("Set key returned the wrong response")
@@ -259,6 +268,10 @@ func fireCasRequest(t *testing.T, kvc pb.KvStoreClient, key string, val string, 
 		t.Fatalf("Request error %v", err)
 	}
 	t.Logf("Got response: %v", res)
+
+	if res.GetFailure() != nil || res.GetRedirect() != nil {
+		return res
+	}
 
 	//this cas success conjecture is not true if the old value is just the value we want to change to;
 	//but we expect the old value to be another value.
@@ -407,44 +420,102 @@ func severGroupTearDown(t *testing.T, fromG int, toG int) {
 	time.Sleep(30 * time.Second)
 }
 
-func fireSetRequestsToShardedKVStore(t *testing.T, keys []string, values []string, config *pb.ShardConfig, verify bool, w *LockedWriter) {
+func fireSetRequestsToShardedKVStore(t *testing.T, keys []string, values []string, config *pb.ShardConfig, verify bool, w *LockedWriter, leaderMap map[int64]pb.KvStoreClient) {
 	for i, key := range keys {
 		shard := key2shard(key)
 		gid := config.ShardsGroupMap.Gids[shard]
 		t.Logf("Setting key, key: %v, shard: %v, gid: %v", key, shard, gid)
-		_, kvc := getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
-		fireSetRequest(t, kvc, key, values[i], w, verify)
+
+		retry := true 
+		for retry {
+			var kvc pb.KvStoreClient
+			if leaderMap == nil {
+				_, kvc = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+			} else {
+				kvc = leaderMap[gid]
+			}
+			res := fireSetRequest(t, kvc, key, values[i], w, verify)
+			switch res.Result.(type) {
+			case *pb.Result_Failure:
+				retry = true
+			case *pb.Result_Redirect:
+				retry = true
+			default:
+				retry = false
+			}
+		}
+		
 	}
 }
 
-func fireGetRequestsToShardedKVStore(t *testing.T, keys []string, values []string, config *pb.ShardConfig, verify bool, w *LockedWriter) {
+func fireGetRequestsToShardedKVStore(t *testing.T, keys []string, values []string, config *pb.ShardConfig, verify bool, w *LockedWriter, leaderMap map[int64]pb.KvStoreClient) {
 	for i, key := range keys {
 		shard := key2shard(key)
 		gid := config.ShardsGroupMap.Gids[shard]
 		t.Logf("Retriving key, key: %v, shard: %v, gid: %v", key, shard, gid)
-		_, kvc := getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
-		fireGetRequest(t, kvc, key, values[i], w, verify)
+		
+		retry := true 
+		for retry {
+			var kvc pb.KvStoreClient
+			if leaderMap == nil {
+				_, kvc = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+			} else {
+				kvc = leaderMap[gid]
+			}
+			res := fireGetRequest(t, kvc, key, values[i], w, verify)
+			switch res.Result.(type) {
+			case *pb.Result_Failure:
+				retry = true
+			case *pb.Result_Redirect:
+				retry = true
+			default:
+				retry = false
+			}
+		}
 	}
 }
 
-func fireClearRequestsToShardedKVStore(t *testing.T, keys []string, config *pb.ShardConfig) {
+func fireClearRequestsToShardedKVStore(t *testing.T, keys []string, config *pb.ShardConfig, leaderMap map[int64]pb.KvStoreClient) {
 	for _, key := range keys {
 		shard := key2shard(key)
 		gid := config.ShardsGroupMap.Gids[shard]
 		t.Logf("Clearing the kv-store of the server group, key: %v, shard: %v, gid: %v", key, shard, gid)
-		_, kvc := getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+		var kvc pb.KvStoreClient
+		if leaderMap == nil {
+			_, kvc = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+		} else {
+			kvc = leaderMap[gid]
+		}
 		fireClearRequest(t, kvc)
 	}
 }
 
 func fireCasRequestsToShardedKVStore(t *testing.T, keys []string, values []string,
-	expectedVal []string, oldValues []string, config *pb.ShardConfig, verify bool, w *LockedWriter) {
+	expectedVal []string, oldValues []string, config *pb.ShardConfig, verify bool, w *LockedWriter, leaderMap map[int64]pb.KvStoreClient) {
 	for i, key := range keys {
 		shard := key2shard(key)
 		gid := config.ShardsGroupMap.Gids[shard]
 		t.Logf("CAS set key, key: %v, shard: %v, gid: %v", key, shard, gid)
-		_, kvc := getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
-		fireCasRequest(t, kvc, key, values[i], expectedVal[i], oldValues[i], w, verify)
+
+		retry := true 
+		for retry {
+			var kvc pb.KvStoreClient
+			if leaderMap == nil {
+				_, kvc = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+			} else {
+				kvc = leaderMap[gid]
+			}
+			res := 	fireCasRequest(t, kvc, key, values[i], expectedVal[i], oldValues[i], w, verify)
+			switch res.Result.(type) {
+			case *pb.Result_Failure:
+				retry = true
+			case *pb.Result_Redirect:
+				retry = true
+			default:
+				retry = false
+			}
+		}
+
 	}
 }
 
@@ -459,8 +530,8 @@ func TestCorrectShardGroup(t *testing.T) {
 	keys := []string{"x", "y"}
 	values := []string{"1", "2"}
 
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, 2)
 }
@@ -495,7 +566,7 @@ func TestKVCorrectnessShardJoin(t *testing.T) {
 	//make some set requests before the Join and Leave of shard master
 	keys := []string{"hello", "Victor", "NYU", "Distributed Systems", "GoLang"}
 	values := []string{"world", "is a name", "New York University", "is fun?", "???"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	//the old keys' value should preserved after new kv-store server group(s) join
 	prepareSeverGroupForTest(t, 1, 2, NUM_RAFT_SERVERS, NUM_SHARD_MASTER_SERVERS)
@@ -504,7 +575,7 @@ func TestKVCorrectnessShardJoin(t *testing.T) {
 	time.Sleep(15 * time.Second)
 
 	config = fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, 2)
 }
@@ -519,7 +590,7 @@ func TestKVCorrectnessShardLeave(t *testing.T) {
 	//make some set requests before the Join and Leave of shard master
 	keys := []string{"hello", "Victor", "NYU", "Distributed Systems", "GoLang"}
 	values := []string{"world", "is a name", "New York University", "is fun?", "???"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	//the old keys' value should preserved after some kv-store server group(s) left
 	gids := []int64{1, 2}
@@ -527,7 +598,7 @@ func TestKVCorrectnessShardLeave(t *testing.T) {
 	time.Sleep(15 * time.Second)
 
 	config = fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, 2)
 }
@@ -542,7 +613,7 @@ func TestKVCorrectnessShardMove(t *testing.T) {
 	//make some set requests before the Join and Leave of shard master
 	keys := []string{"hello", "Victor", "NYU", "Distributed Systems", "GoLang", "shard move work?"}
 	values := []string{"world", "is a name", "New York University", "is fun?", "???", "yes"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	//the old keys' value should preserved after a shard move
 	_, smc = getConnectionToShardMasterRaftLeader(t)
@@ -554,7 +625,7 @@ func TestKVCorrectnessShardMove(t *testing.T) {
 	time.Sleep(20 * time.Second)
 
 	config = fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, 2)
 }
@@ -570,7 +641,7 @@ func TestKVAfterShardNodeOrKVNodeFailure(t *testing.T) {
 	//make some set requests before the failure of the shard / kv-store nodes
 	keys := []string{"hello", "Victor", "NYU", "Distributed Systems", "GoLang"}
 	values := []string{"world", "is a name", "New York University", "is fun?", "???"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	time.Sleep(15 * time.Second)
 
@@ -585,10 +656,10 @@ func TestKVAfterShardNodeOrKVNodeFailure(t *testing.T) {
 	}
 
 	time.Sleep(60 * time.Second)
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 	keysAdditional := []string{"das", "wa", "ow", "pq"}
 	valuesAdditional := []string{"world", "is a name", "New York University", "is fun?"}
-	fireSetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil, nil)
 
 	relaunchGivenShardMasterRaftServer(t, "0")
 	relaunchGivenShardMasterRaftServer(t, "1")
@@ -598,8 +669,8 @@ func TestKVAfterShardNodeOrKVNodeFailure(t *testing.T) {
 	}
 
 	time.Sleep(40 * time.Second)
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
-	fireGetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
+	fireGetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, numGroups-1)
 }
@@ -616,7 +687,7 @@ func TestSurviveLeaderFailure(t *testing.T) {
 
 	keys := []string{"x", "y", "z", "k"}
 	values := []string{"2", "21", "2", "11"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	//fail the leader
 	failedLeaders := make(map[int64]string)
@@ -638,11 +709,11 @@ func TestSurviveLeaderFailure(t *testing.T) {
 	time.Sleep(40 * time.Second)
 	_, smc := getConnectionToShardMasterRaftLeader(t)
 	config = fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	keysAdditional := []string{"efe", "vewvew", "dqwq", "wwfff"}
 	valuesAdditional := []string{"world", "is a name", "New York University", "is fun?"}
-	fireSetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil, nil)
 
 	for gid, leaderId := range failedLeaders {
 		relaunchGivenRaftServer(t, strconv.Itoa(int(gid)), leaderId, NUM_RAFT_SERVERS, NUM_SHARD_MASTER_SERVERS)
@@ -653,8 +724,8 @@ func TestSurviveLeaderFailure(t *testing.T) {
 	_, smc = getConnectionToShardMasterRaftLeader(t)
 	config = fireQueryRequest(t, smc, &pb.QueryArgs{Num: -1})
 	t.Logf("Relaunched failed leaders, and ensuring the data values are intact.")
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
-	fireGetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
+	fireGetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, numGroups-1)
 }
@@ -670,14 +741,14 @@ func TestClear(t *testing.T) {
 
 	keys := []string{"x", "y", "z"}
 	values := []string{"99", "88", "18"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
-	fireClearRequestsToShardedKVStore(t, keys, config)
+	fireClearRequestsToShardedKVStore(t, keys, config, nil)
 
 	//the values should be empty after clear
 	values = []string{"", "", ""}
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, numGroups-1)
 }
@@ -692,13 +763,13 @@ func TestCas(t *testing.T) {
 
 	keys := []string{"x", "y", "z"}
 	values := []string{"99", "88", "18"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
 
 	keys = []string{"x", "y", "k", "z'"}
 	values = []string{"199", "000", "18", "sda"}
 	expectedVal := []string{"199", "88", "18", ""}
 	oldVal := []string{"99", "87", "", "ewq"}
-	fireCasRequestsToShardedKVStore(t, keys, values, expectedVal, oldVal, config, true, nil)
+	fireCasRequestsToShardedKVStore(t, keys, values, expectedVal, oldVal, config, true, nil, nil)
 
 	severGroupTearDown(t, 0, numGroups-1)
 }
@@ -740,33 +811,33 @@ func TestSerialRequestsCorrectness(t *testing.T) {
 
 	keys := []string{"x", "y"}
 	values := []string{"1", "2"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, w)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, w, nil)
 
 	keys = []string{"x"}
 	values = []string{"1"}
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, w)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, w, nil)
 
 	keys = []string{"x", "z", "x", "y"}
 	values = []string{"2", "3", "3", "4"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, w)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, w, nil)
 
 	keys = []string{"y", "x"}
 	values = []string{"4", "3"}
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, w)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, w, nil)
 
 	keys = []string{"z"}
 	values = []string{"3"}
-	fireSetRequestsToShardedKVStore(t, keys, values, config, true, w)
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, w, nil)
 
 	keys = []string{"z", "x"}
 	values = []string{"4", "5"}
 	expectedVal := []string{"4", "3"}
 	oldVal := []string{"3", "4"}
-	fireCasRequestsToShardedKVStore(t, keys, values, expectedVal, oldVal, config, true, w)
+	fireCasRequestsToShardedKVStore(t, keys, values, expectedVal, oldVal, config, true, w, nil)
 
 	keys = []string{"x", "y", "z"}
 	values = []string{"3", "4", "4"}
-	fireGetRequestsToShardedKVStore(t, keys, values, config, true, w)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, w, nil)
 
 	w.writer.Flush()
 	severGroupTearDown(t, 0, numGroups-1)
@@ -819,7 +890,7 @@ func testConcurrentSet(t *testing.T, config *pb.ShardConfig, parallel bool) {
 			if parallel {
 				st.Parallel()
 			}
-			fireSetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, true, nil)
+			fireSetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, true, nil, nil)
 		})
 	}
 }
@@ -854,7 +925,7 @@ func testConcurrentGet(t *testing.T, config *pb.ShardConfig, parallel bool) {
 			if parallel {
 				st.Parallel()
 			}
-			fireGetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, nil)
+			fireGetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, nil, nil)
 		})
 	}
 }
@@ -877,7 +948,12 @@ func TestConcurrentGetSetCas(t *testing.T) {
 	numGroups := 3
 	config, _ := prepareShardMasterAndServerGroups(t, numGroups, NUM_RAFT_SERVERS)
 
-	time.Sleep(30 * time.Second)
+	leaderMap := make(map[int64]pb.KvStoreClient)
+	for gid:=0; gid<numGroups; gid++ {
+		_, leaderMap[int64(gid)] = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+	}
+
+	time.Sleep(60 * time.Second)
 
 	tc := []struct {
 		op     int //0: get, 1:set, 2:cas
@@ -925,17 +1001,17 @@ func TestConcurrentGetSetCas(t *testing.T) {
 		case 0:
 			go func() {
 				defer wg.Done()
-				fireGetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w)
+				fireGetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w, leaderMap)
 			}()
 		case 1:
 			go func() {
 				defer wg.Done()
-				fireSetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w)
+				fireSetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w, leaderMap)
 			}()
 		case 2:
 			go func() {
 				defer wg.Done()
-				//fireCasRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, []string{""}, []string{tt.oldVal}, config, false, w)
+				fireCasRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, []string{""}, []string{tt.oldVal}, config, false, w, leaderMap)
 			}()
 		}
 	}
@@ -954,7 +1030,7 @@ func TestConcurrentGetSetCas(t *testing.T) {
 	- TestRaftKvHighConcurrentContention
 */
 func TestHighConcurrentContention(t *testing.T) {
-	num_concurr_threads := 10
+	num_concurr_threads := 20
 	t.Logf("Number of concurrent threads: %v", num_concurr_threads)
 
 	f, err := os.Create("raft_test_data/c-high-concurrent-contention.txt")
@@ -967,7 +1043,10 @@ func TestHighConcurrentContention(t *testing.T) {
 	numGroups := 3
 	config, _ := prepareShardMasterAndServerGroups(t, numGroups, NUM_RAFT_SERVERS)
 
-	time.Sleep(20 * time.Second)
+	leaderMap := make(map[int64]pb.KvStoreClient)
+	for gid:=0; gid<numGroups; gid++ {
+		_, leaderMap[int64(gid)] = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+	}
 
 	tc := []struct {
 		op     int //0: get, 1:set, 2:cas
@@ -1018,11 +1097,11 @@ func TestHighConcurrentContention(t *testing.T) {
 				time.Sleep(time.Duration(r) * time.Millisecond)
 				switch tt.op {
 				case 0:
-					fireGetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w)
+					fireGetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w, leaderMap)
 				case 1:
-					fireSetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w)
+					fireSetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, w, leaderMap)
 				case 2:
-					fireCasRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, []string{""}, []string{tt.oldVal}, config, false, w)
+					fireCasRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, []string{""}, []string{tt.oldVal}, config, false, w, leaderMap)
 				}
 			}
 		}()
@@ -1031,3 +1110,116 @@ func TestHighConcurrentContention(t *testing.T) {
 	wg.Wait()
 	w.writer.Flush()
 }
+
+//******** Regression: Log Compaction Test Cases ********//
+
+func TestFailedNodesCanRejoinSuccesfullyAfterLogCompaction(t *testing.T) {
+	//first trigger a lot of requests to let the log compaction happens
+	num_concurr_threads := 10
+	r := rand.Intn(15)
+
+	numGroups := 3
+	numRaftServers := 5
+	config, _ := prepareShardMasterAndServerGroups(t, numGroups, numRaftServers)
+
+	leaderMap := make(map[int64]pb.KvStoreClient)
+	for gid:=0; gid<numGroups; gid++ {
+		_, leaderMap[int64(gid)] = getKVConnectionToRaftLeader(t, strconv.Itoa(int(gid)))
+	}
+
+	tc := []struct {
+		op     int //0: get, 1:set, 2:cas
+		key    string
+		val    string
+		oldVal string
+	}{
+		{1, "hello", "hi", ""},
+		{1, "test_f_nodes_failure", "3", ""},
+		{1, "test_leader_failure", "2", ""},
+		{1, "abc", "def", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{0, "hello", "", ""},
+		{1, "nyu", "New New York University", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{0, "hello", "", ""},
+		{0, "OOP", "", ""},
+		{0, "nyu", "", ""},
+		{1, "OOP", "Object Oriented Programming", ""},
+		{1, "test_f_nodes_failure", "9", ""},
+		{1, "abc", "defdsds", ""},
+		{1, "hello", "hihi???", ""},
+		{1, "test_f_nodes_failure", "4", ""},
+		{1, "test_leader_failure", "8", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{0, "hello", "", ""},
+		{1, "test_f_nodes_failure", "9d0", ""},
+		{0, "OOP", "", ""},
+		{0, "test_f_nodes_failure", "", ""},
+		{1, "abcde", "defee", ""},
+		{0, "nyu", "", ""},
+		{1, "nyu", "New New York University? seriously", ""},
+		{0, "nyuabc", "", ""},
+		{0, "nyu", "", ""},
+		{1, "test_f_nodes_failure", "91", ""},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(num_concurr_threads) //simulate 5 clients making the same set of requests concurrently
+
+	for i := 1; i <= num_concurr_threads; i++ {
+		go func() {
+			time.Sleep((time.Duration(r) + 1) * time.Millisecond)
+			defer wg.Done()
+			//each simulated client fires the same set of requests
+			for _, tt := range tc {
+				tt := tt
+				time.Sleep(time.Duration(r) * time.Millisecond)
+				switch tt.op {
+				case 0:
+					fireGetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, nil, leaderMap)
+				case 1:
+					fireSetRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, config, false, nil, leaderMap)
+				case 2:
+					fireCasRequestsToShardedKVStore(t, []string{tt.key}, []string{tt.val}, []string{""}, []string{tt.oldVal}, config, false, nil, leaderMap)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	//fire some key value set just for the purpose of later validation
+	keys := []string{"survive log compaction1", "survive log compaction2"}
+	values := []string{"1", "2"}
+	fireSetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
+
+	//then fail some nodes
+	//each raft groups has 5 nodes, should be able to tolerate 2 failures
+	for i := 0; i < numGroups; i++ {
+		failGivenRaftServer(t, strconv.Itoa(i), "0")
+		failGivenRaftServer(t, strconv.Itoa(i), "1")
+	}
+
+	time.Sleep(60 * time.Second)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
+	keysAdditional := []string{"das", "wa", "ow", "pq"}
+	valuesAdditional := []string{"world", "is a name", "New York University", "is fun?"}
+	fireSetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil, nil)
+
+
+	//relaunch some nodes
+	for i := 0; i < numGroups; i++ {
+		relaunchGivenRaftServer(t, strconv.Itoa(i), "0", numRaftServers, numRaftServers)
+		relaunchGivenRaftServer(t, strconv.Itoa(i), "1", numRaftServers, numRaftServers)
+	}
+
+	time.Sleep(40 * time.Second)
+	fireGetRequestsToShardedKVStore(t, keys, values, config, true, nil, nil)
+	fireGetRequestsToShardedKVStore(t, keysAdditional, valuesAdditional, config, true, nil, nil)
+
+	severGroupTearDown(t, 0, numGroups-1)
+}
+
+
+
+
+//******** Regression: Membership Changes Test Cases ********//

@@ -98,6 +98,7 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 		select {
 		/** election timeout -> candidate **/
 		case <-raft.electionTimer.C:
+			raft.mu.Lock()
 			log.Printf("Election timeout: %s becomes a candidate requesting vote.", raft.me)
 
 			//initialize vote info every time it becomes candidate
@@ -110,14 +111,15 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 			// this also means within timeout period without receiving majority votes, split votes etc...
 			// it will trigger the election process again
 			restartTimer(raft.electionTimer, randomDuration(raft.randSeed))
+
+			raft.mu.Unlock()
+
 		/** client request handling **/
 		case op := <-sm.C:
-			//raft.mu.Lock()
+			raft.mu.Lock()
 			if raft.state == leader {
 				index := raft.getLastLogIndex() + 1
 				log.Printf("Receive client request, command: %s, assignedIndex: %v.", op.command.Operation, index)
-
-				raft.mu.Lock()
 
 				if op.command.Operation == pb.Op_CONFIG_CHG {
 
@@ -159,7 +161,6 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 				}
 
 				raft.persist()
-				raft.mu.Unlock()
 
 				//instantly send append entry after receiving client request and added to leader's log
 				log.Printf("Trigger append entries request to peers immediately after receving the client request.")
@@ -171,10 +172,13 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 				log.Printf("Peer %s is not leader, redirecting client request to leader %s.", raft.me, raft.leader)
 				op.response <- pb.Result{Result: &pb.Result_Redirect{Redirect: &pb.Redirect{Server: strings.Split(raft.leader, ":")[0]}}}
 			}
-			//raft.mu.Unlock()
+
+			raft.mu.Unlock()
 
 		/** send heartbeats to followers to maintain authority **/
 		case <-raft.heartBeatTimer.C:
+			raft.mu.Lock()
+
 			log.Printf("Heartbeat timeout ...")
 
 			//log.Printf("raft.state: %d", raft.state)
@@ -185,6 +189,7 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 
 			restartTimer(raft.heartBeatTimer, HEARTBEAT_TIMEOUT*time.Millisecond)
 
+			raft.mu.Unlock()
 		/** handle append entry request from other raft peers **/
 		case ae := <-raft.AppendChan:
 			raft.mu.Lock()
@@ -283,7 +288,7 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 								raft.updateQuorumSize()
 							}
 
-							log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Cmd.Operation)
+							//log.Printf("Entry appended to peer: %s, index: %d, command: %s.", raft.me, entry.Index, entry.Cmd.Operation)
 						}
 					}
 				}
@@ -448,7 +453,7 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 					break
 				}
 				log.Printf("Got response to vote request from %v", vres.peer)
-				log.Printf("Peers %s granted %v. The peer's current term is %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
+				//log.Printf("Peers %s granted %v. The peer's current term is %v", vres.peer, vres.ret.VoteGranted, vres.ret.Term)
 
 				//if not candidate state => already reached majority / reverted to follower
 				if raft.state == candidate {
@@ -524,8 +529,8 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 						raft.nextIndex[ar.peer] = max(raft.nextIndex[ar.peer], ar.matchIndex+1)
 						raft.matchIndex[ar.peer] = max(raft.matchIndex[ar.peer], ar.matchIndex)
 						n := raft.matchIndex[ar.peer]
-						log.Printf("peer: %s, peer_matchIndex: %d, peer_nextIndex: %d, leaderCommitIndex: %d.",
-							ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)
+						//log.Printf("peer: %s, peer_matchIndex: %d, peer_nextIndex: %d, leaderCommitIndex: %d.",
+						//ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)
 						//the matched index is beyond leader's commitIndex and it is in leader's current term (Figure 8 in the paper)
 						//if majority is reached, it is safe to commit that matchedIndex
 						if entry, _ := raft.getLogEntry(n); n > raft.commitIndex &&
@@ -536,14 +541,14 @@ func serve(sm *ShardMaster, r *rand.Rand, peers *arrayPeers, id string, port int
 								matchCount = int64(1)
 							}
 
-							log.Printf("entry: %s.", entry)
+							//log.Printf("entry: %s.", entry)
 							for _, peer := range *raft.getServerList() {
 								if raft.matchIndex[peer] >= n {
 									matchCount++
 								}
 							}
 
-							log.Printf("matchCount: %d, quorumSize: %d.", matchCount, raft.quorumSize)
+							//log.Printf("matchCount: %d, quorumSize: %d.", matchCount, raft.quorumSize)
 							if matchCount >= raft.quorumSize {
 								raft.commitIndex = n
 								//apply to state machine

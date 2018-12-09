@@ -112,7 +112,7 @@ func getCurrentShardMasterLeaderByGetRequest(servers *pb.ServerList) string {
 		}
 	}
 
-	log.Fatalf("No sever is availabile for the given shard master.")
+	log.Printf("No sever is availabile for the given shard master.")
 	return ""
 }
 
@@ -642,7 +642,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 						raft.matchIndex[ar.peer] = max(raft.matchIndex[ar.peer], ar.matchIndex)
 						n := raft.matchIndex[ar.peer]
 						//log.Printf("peer: %s, peer_matchIndex: %d, peer_nextIndex: %d, leaderCommitIndex: %d.",
-							ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)
+						//ar.peer, raft.matchIndex[ar.peer], raft.nextIndex[ar.peer], raft.commitIndex)
 						//the matched index is beyond leader's commitIndex and it is in leader's current term (Figure 8 in the paper)
 						//if majority is reached, it is safe to commit that matchedIndex
 						if entry, _ := raft.getLogEntry(n); n > raft.commitIndex &&
@@ -734,12 +734,13 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 			if raft.state == leader {
 				//in go rountine to make request shard master
 				//so it doesn't block the raft main loop logic
-				go func(smc pb.ShardMasterClient, raft Raft, s *KVStore) {
-					newConfigRes, err1 := smc.Query(context.Background(), &pb.QueryArgs{Num: s.config.Num + 1})
-					maxConfigRes, err2 := smc.Query(context.Background(), &pb.QueryArgs{Num: -1})
+				go func(raft *Raft, s *KVStore) {
+					newConfigRes, err1 := raft.shardMasterC.Query(context.Background(), &pb.QueryArgs{Num: s.config.Num + 1})
+					maxConfigRes, err2 := raft.shardMasterC.Query(context.Background(), &pb.QueryArgs{Num: -1})
 
 					if err1 != nil || err2 != nil {
 						log.Printf("Shard master calls error, err1: %v, err2: %v", err1, err2)
+						raft.shardMasterC = getShardMasterRaftLeaderConnection(&pb.ServerList{List: *shardMasterServers})
 						return
 					}
 
@@ -772,7 +773,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int, sha
 						log.Printf("Received old shard config from shard master, current config num: %v, recieved config num: %v", newConfig.Num, s.config.Num)
 						s.mu.Unlock()
 					}
-				}(raft.shardMasterC, raft, s)
+				}(&raft, s)
 
 				restartTimer(raft.shardQueryTimer, SHARD_QUERY_TIMEOUT*time.Millisecond)
 			}

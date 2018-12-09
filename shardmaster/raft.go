@@ -23,8 +23,8 @@ const (
 	//shutdown  = 4
 
 	//different timeout in ms
-	ELECTION_TIMEOUT_LOWER_BOUND = 1000
-	ELECTION_TIMEOUT_UPPER_BOUND = 4000
+	ELECTION_TIMEOUT_LOWER_BOUND = 3000
+	ELECTION_TIMEOUT_UPPER_BOUND = 6000
 	HEARTBEAT_TIMEOUT            = 500
 	LOG_COMPACTION_LIMIT         = 300 //-1 means no log compaction
 )
@@ -415,10 +415,10 @@ func (r *Raft) ProcessLogs(sm *ShardMaster) {
 		}
 
 		delete(r.clientsResponse, entry.Index)
-		log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Cmd.Operation)
+		//log.Printf("Applied committed log to the state machine. Index: %d, Command: %s.", entry.Index, entry.Cmd.Operation)
 	}
 
-	log.Printf("Length of log: %v", len(r.log))
+	//log.Printf("Length of log: %v", len(r.log))
 	//stop the election timeout timer during compaction which might take longer time than the timeout limit
 	//r.electionTimer.Stop()
 	//check if we reach compaction limit, and do compaction
@@ -438,9 +438,6 @@ func (r *Raft) ProcessLogs(sm *ShardMaster) {
 
 // this is used to construct and send a vote request to all peers
 func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteResponseChan chan VoteResponse) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	r.state = candidate
 	r.currentTerm++
 	r.votedFor = r.me
@@ -471,9 +468,6 @@ func (r *Raft) sendVoteRequests(peerClients map[string]pb.RaftClient, voteRespon
 
 // this is used to construct and send an append entry request to all peers
 func (r *Raft) sendApeendEntries(peerClients map[string]pb.RaftClient, appendResponseChan chan AppendResponse, snapshotResponseChan chan InstallSnapshotResponse) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	for p, c := range peerClients {
 		r.sendApeendEntriesTo(p, c, appendResponseChan, snapshotResponseChan)
 	}
